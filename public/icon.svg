@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Ratón Café · icono del ratoncito barista -->
+  <rect width="64" height="64" rx="14" fill="#f4e4cc"/>
+  <circle cx="19" cy="19" r="9.5" fill="#c9b8a5" stroke="#a08b73" stroke-width="2.4"/>
+  <circle cx="19" cy="19" r="5.2" fill="#ecc3b8"/>
+  <circle cx="45" cy="19" r="9.5" fill="#c9b8a5" stroke="#a08b73" stroke-width="2.4"/>
+  <circle cx="45" cy="19" r="5.2" fill="#ecc3b8"/>
+  <rect x="21" y="44" width="22" height="15" rx="7" fill="#a7b995" stroke="#a08b73" stroke-width="2.4"/>
+  <circle cx="32" cy="35" r="17.5" fill="#c9b8a5" stroke="#a08b73" stroke-width="2.4"/>
+  <g transform="rotate(-10 32 18)">
+    <rect x="22.5" y="11.5" width="19" height="8.5" rx="3.4" fill="#f6ead6" stroke="#a08b73" stroke-width="2"/>
+    <rect x="22.5" y="16.5" width="19" height="3.5" rx="1.7" fill="#c96f4a"/>
+  </g>
+  <circle cx="25.5" cy="33.5" r="2.4" fill="#3a2c22"/>
+  <circle cx="38.5" cy="33.5" r="2.4" fill="#3a2c22"/>
+  <ellipse cx="32" cy="39" r="2.7" fill="#d98f8a"/>
+  <path d="M 27 43 q 5 3.6 10 0" fill="none" stroke="#3a2c22" stroke-width="2" stroke-linecap="round"/>
+  <ellipse cx="21.5" cy="40.5" rx="3" ry="1.9" fill="#ecc3b8" opacity="0.8"/>
+  <ellipse cx="42.5" cy="40.5" rx="3" ry="1.9" fill="#ecc3b8" opacity="0.8"/>
+</svg>

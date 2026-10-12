@@ -1,0 +1,49 @@
+/* Ratón Café — estilos globales (Tailwind CSS 4) */
+@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  /* Tipografía redondeada y acogedora */
+  --font-display: "Baloo 2", "Nunito", ui-rounded, system-ui, sans-serif;
+  --font-body: "Nunito", ui-rounded, system-ui, sans-serif;
+
+  /* Paleta cálida: crema, caramelo, terracota y verde salvia */
+  --color-crema: #f8f0e2;
+  --color-caramelo: #c98a4b;
+  --color-terracota: #c96f4a;
+  --color-salvia: #9caf88;
+  --color-cafe: #4a2c1a;
+  --color-cafe-sombra: #5b4632;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: #f4e4cc;
+    color: var(--color-cafe-sombra);
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  /* Fila de fichas en vertical: deslizable pero sin barra visible */
+  .chip-row {
+    scrollbar-width: none;
+  }
+  .chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Columna lateral de fichas (escritorio): scroll discreto */
+  .scroll-cafe {
+    scrollbar-width: thin;
+    scrollbar-color: #d9c3a5 transparent;
+  }
+}

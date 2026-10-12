@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f2e2c8" />
+    <meta name="description" content="Ratón Café: un acogedor juego de cafetería artesanal. Prepara bebidas por capas, sirve pedidos perfectos y bate tu récord." />
+    <title>Ratón Café · Cafetería acogedora</title>
+    <!-- Favicon: el ratoncito barista (SVG servido desde /public) -->
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <style>
+      /* Pantalla de carga ("splash") dentro de #root: React la reemplaza al montar.
+         Si se queda congelada → hay un error de JavaScript (revisa la consola).
+         Si no aparece NADA → es caché o la rama de Pages está mal configurada. */
+      #root:empty + noscript { display: none; }
+      .rc-splash {
+        position: fixed; inset: 0; z-index: 10;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+        background: linear-gradient(180deg, #f9f1e4 0%, #f0dcc0 100%);
+        color: #6b4a2f;
+        font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+      }
+      .rc-taza { position: relative; width: 58px; height: 42px; margin-top: 26px;
+        border: 5px solid #a9764a; border-top-width: 3px; border-radius: 8px 8px 20px 20px;
+        background: linear-gradient(180deg, #d9a468 0%, #8a5a33 90%);
+        animation: rc-mecer 2.4s ease-in-out infinite; }
+      .rc-taza::after { content: ""; position: absolute; right: -16px; top: 4px; width: 14px; height: 18px;
+        border: 5px solid #a9764a; border-left: 0; border-radius: 0 10px 10px 0; }
+      .rc-taza span { position: absolute; top: -22px; width: 5px; height: 14px; border-radius: 4px;
+        background: #fff; opacity: 0; animation: rc-vapor 1.8s ease-in-out infinite; }
+      .rc-taza span:nth-child(1) { left: 10px; animation-delay: 0s; }
+      .rc-taza span:nth-child(2) { left: 24px; animation-delay: 0.4s; }
+      .rc-taza span:nth-child(3) { left: 38px; animation-delay: 0.8s; }
+      .rc-splash p { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+      .rc-splash small { font-size: 11px; color: #a08b73; }
+      @keyframes rc-vapor { 0% { transform: translateY(6px) scaleY(0.6); opacity: 0; }
+        40% { opacity: 0.85; } 100% { transform: translateY(-10px) scaleY(1.15); opacity: 0; } }
+      @keyframes rc-mecer { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Splash: React lo sustituye al montar la app -->
+      <div class="rc-splash" role="status" aria-live="polite">
+        <div class="rc-taza" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p>Preparando la cafetería…</p>
+        <small>Ratón Café</small>
+      </div>
+    </div>
+    <noscript>
+      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f9f1e4;color:#6b4a2f;font-family:system-ui,sans-serif;padding:24px;text-align:center;">
+        Ratón Café necesita JavaScript para preparar tu bebida. Actívalo en tu navegador y recarga la página.
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
