@@ -4,7 +4,7 @@
  */
 
 import { motion } from "framer-motion";
-import { Coins, Coffee, Flame, Home, RotateCcw, Trophy } from "lucide-react";
+import { Coins, Coffee, Flame, Home, RotateCcw, Trophy, UserX } from "lucide-react";
 import { Fondo } from "../components/Fondo";
 import { Mascot } from "../components/Mascot";
 import type { ResultadoPartida } from "../game/types";
@@ -17,24 +17,25 @@ export interface EndScreenProps {
 
 export function EndScreen({ resultado, onReintentar, onMenu }: EndScreenProps) {
   const estadisticas = [
-    { Icono: Coffee, valor: `${resultado.pedidos}`, etiqueta: "pedidos perfectos", color: "text-[#9caf88]" },
+    { Icono: Coffee, valor: `${resultado.pedidos}`, etiqueta: "pedidos servidos", color: "text-[#9caf88]" },
     { Icono: Coins, valor: `${resultado.propinas.toLocaleString("es")}`, etiqueta: "propinas ($)", color: "text-[#c98a4b]" },
     { Icono: Flame, valor: `${resultado.mejorCombo}`, etiqueta: "mejor racha", color: "text-[#c96f4a]" },
+    { Icono: UserX, valor: `${resultado.perdidos}`, etiqueta: "se fueron", color: "text-[#c4473f]" },
   ];
 
   return (
-    <div className="relative flex h-dvh flex-col items-center justify-center overflow-hidden px-4 text-center">
+    <div className="relative flex h-dvh flex-col items-center justify-center overflow-y-auto px-4 py-4 text-center">
       <Fondo />
 
       <motion.div
         initial={{ opacity: 0, y: 28, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: "spring", stiffness: 130, damping: 16 }}
-        className="relative z-10 flex w-full max-w-md flex-col items-center gap-4 rounded-3xl border border-[#ecdcbf] bg-[#fffdf6]/92 p-6 shadow-xl backdrop-blur-sm"
+        className="relative z-10 flex w-full max-w-md flex-col items-center gap-3 rounded-3xl border border-[#ecdcbf] bg-[#fffdf6]/92 p-5 shadow-xl backdrop-blur-sm sm:gap-4 sm:p-6"
       >
-        <Mascot humor={resultado.pedidos > 0 ? "feliz" : "preocupado"} className="w-24 drop-shadow-lg" />
+        <Mascot humor={resultado.pedidos > 0 ? "feliz" : "preocupado"} className="w-16 drop-shadow-lg sm:w-24" />
 
-        <h2 className="font-display text-3xl font-extrabold text-[#6b4a2f]">
+        <h2 className="font-display text-2xl font-extrabold text-[#6b4a2f] sm:text-3xl">
           {resultado.esRecord ? "¡Nuevo récord de la casa!" : "¡Cerramos por hoy!"}
         </h2>
 
@@ -50,7 +51,7 @@ export function EndScreen({ resultado, onReintentar, onMenu }: EndScreenProps) {
           </motion.div>
         )}
 
-        <div className="grid w-full grid-cols-3 gap-2">
+        <div className="grid w-full grid-cols-4 gap-1.5">
           {estadisticas.map(({ Icono, valor, etiqueta, color }, i) => (
             <motion.div
               key={etiqueta}

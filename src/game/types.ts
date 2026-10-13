@@ -1,64 +1,53 @@
 /**
- * Tipos centrales de Ratón Café.
- * Representan el estado de la bebida, los pedidos y la partida.
+ * Tipos centrales de Ratón Café (modo cafetería estilo Overcooked).
+ * El juego va de ESTACIONES que producen ingredientes y PEDIDOS con
+ * paciencia limitada que hay que servir a tiempo.
  */
 
-/** Categorías de ingredientes disponibles en la barra de trabajo. */
-export type Categoria = "base" | "leche" | "sirope" | "topping";
+/** Ingredientes/preparaciones que salen de cada estación. */
+export type IngredienteId =
+  | "espresso"       // máquina de espresso (tarda, se quema)
+  | "lecheVapor"     // vaporizador (tarda, se quema)
+  | "chocolate"      // dispensador (instantáneo)
+  | "cremaBatida"    // sifón (instantáneo)
+  | "panTostado"     // tostadora (tarda, se quema)
+  | "jamonQueso"     // tabla de relleno (instantáneo)
+  | "rebanadaPastel" // vitrina (instantáneo)
+  | "rebanadaPie"    // vitrina (instantáneo)
+  | "merengue";      // vitrina (instantáneo)
 
-/** Identificadores de bases de espresso (capas apilables, máx. 3). */
-export type BaseId = "ristretto" | "espresso" | "doble" | "descafeinado" | "coldbrew";
+/** Los 5 productos de la carta. */
+export type RecetaId = "capuchino" | "mokachino" | "sandwich" | "pastel" | "pieLimon";
 
-/** Identificadores de leches / texturas. */
-export type LecheId = "entera" | "descremada" | "avena" | "almendra";
+/** Zonas de la cocina (agrupan las estaciones visualmente). */
+export type Zona = "cafe" | "cocina" | "vitrina";
 
-/** Identificadores de siropes y salsas (se pueden repetir ×2). */
-export type SiropeId = "vainilla" | "caramelo" | "chocolate" | "avellana" | "matcha";
+/** Estado en vivo de una estación. */
+export type EstadoEstacion = "libre" | "trabajando" | "listo" | "quemado";
 
-/** Identificadores de toppings (algunos se pueden repetir ×2). */
-export type ToppingId =
-  | "arteCorazon"
-  | "arteRoseta"
-  | "cremaBatida"
-  | "canela"
-  | "cacao"
-  | "malvaviscos"
-  | "granoCafe";
-
-/** Un identificador de ingrediente genérico (unión de todos). */
-export type IngredienteId = BaseId | LecheId | SiropeId | ToppingId;
-
-/**
- * Estado completo de una bebida (tanto la real del jugador como la del ticket).
- * Es un "multiset" por categoría: los arrays pueden contener repetidos.
- */
-export interface Bebida {
-  bases: BaseId[]; // capas apiladas, máx. MAX_BASES
-  leche: LecheId | null; // una sola leche (reemplazable)
-  siropes: SiropeId[]; // puede haber repetidos
-  toppings: ToppingId[]; // puede haber repetidos
+/** Estación con su reloj interno (desde = instante en que arrancó). */
+export interface Estacion {
+  estado: EstadoEstacion;
+  desde: number; // timestamp ms
 }
 
-/** Un pedido es simplemente la bebida objetivo + metadatos de presentación. */
+/** Un pedido en la barra, con su paciencia corriendo. */
 export interface Pedido {
-  id: number; // correlativo para animaciones y depuración
-  cliente: string; // nombre simpático del cliente
-  bebida: Bebida;
+  id: number;
+  receta: RecetaId;
+  cliente: string;
+  nacido: number; // timestamp ms
+  paciencia: number; // ms totales de espera
 }
 
-/** Acción del jugador sobre la taza (sirve para deshacer y para sonidos). */
-export interface Accion {
-  categoria: Categoria;
-  id: IngredienteId;
-}
-
-/** Estado de ánimo de la mascota (reacciona en vivo a la partida). */
+/** Estado de ánimo de la mascota. */
 export type HumorMascota = "idle" | "feliz" | "preocupado";
 
 /** Estadísticas finales de una partida. */
 export interface ResultadoPartida {
-  pedidos: number; // pedidos perfectos entregados
-  propinas: number; // puntuación total (propinas acumuladas)
-  mejorCombo: number; // racha máxima alcanzada
-  esRecord: boolean; // si rompió el récord histórico
+  pedidos: number; // pedidos servidos correctamente
+  propinas: number; // puntuación total
+  mejorCombo: number; // racha máxima
+  esRecord: boolean;
+  perdidos: number; // clientes que se fueron sin su pedido
 }

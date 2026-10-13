@@ -144,6 +144,48 @@ class MotorSonido {
     this.nota(90, 0, 0.3, "sawtooth", 0.06);
   }
 
+  /** Ding brillante de "algo quedó listo". */
+  ding(): void {
+    this.nota(1318.5, 0, 0.14, "triangle", 0.2);
+    this.nota(1760, 0.06, 0.16, "sine", 0.16);
+  }
+
+  /** Campana de cocina: un ingrediente está LISTO para recoger. */
+  campana(): void {
+    this.nota(1046.5, 0, 0.5, "sine", 0.22);
+    this.nota(1568, 0.02, 0.4, "triangle", 0.12);
+  }
+
+  /** Campanilla de la puerta: ha entrado un cliente. */
+  campanilla(): void {
+    this.nota(1760, 0, 0.18, "sine", 0.14);
+    this.nota(2349, 0.09, 0.22, "sine", 0.1);
+  }
+
+  /** Chisporroteo de sartén / tostadora al arrancar. */
+  sarten(): void {
+    this.ruidoFiltrado({ dur: 0.6, tipo: "highpass", fInicio: 2800, fFin: 4200, vol: 0.12 });
+  }
+
+  /** Alarma grave: algo SE QUEMÓ. */
+  quemado(): void {
+    this.nota(160, 0, 0.3, "square", 0.12);
+    this.nota(120, 0.14, 0.34, "square", 0.12);
+    this.ruidoFiltrado({ dur: 0.5, tipo: "lowpass", fInicio: 700, fFin: 200, vol: 0.14 });
+  }
+
+  /** Cliente que se marcha enfadado. */
+  clienteSeVa(): void {
+    this.nota(392, 0, 0.22, "triangle", 0.18);
+    this.nota(294, 0.16, 0.3, "triangle", 0.16);
+    this.nota(220, 0.34, 0.4, "sine", 0.14);
+  }
+
+  /** Tirar algo a la basura. */
+  basura(): void {
+    this.ruidoFiltrado({ dur: 0.35, tipo: "bandpass", fInicio: 1800, fFin: 500, q: 1.2, vol: 0.16 });
+  }
+
   /** Clic cerámico de la taza (deshacer / limpiar). */
   taza(): void {
     this.nota(1900, 0, 0.05, "square", 0.06);

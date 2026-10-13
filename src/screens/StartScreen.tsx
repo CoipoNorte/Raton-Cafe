@@ -4,9 +4,13 @@
  */
 
 import { motion } from "framer-motion";
-import { Coffee, Eye, MousePointerClick, Play, Trophy, Volume2, VolumeX } from "lucide-react";
+import { Play, Trophy, Volume2, VolumeX } from "lucide-react";
+import { DishSVG } from "../components/Art";
 import { Fondo } from "../components/Fondo";
 import { Mascot } from "../components/Mascot";
+import { RECETAS } from "../game/recipes";
+import type { RecetaId } from "../game/types";
+import { useViewport } from "../hooks/useViewport";
 
 export interface StartScreenProps {
   recordPedidos: number;
@@ -16,15 +20,16 @@ export interface StartScreenProps {
   onAlternarSilencio: () => void;
 }
 
-const PASOS = [
-  { Icono: Eye, texto: "Mira el ticket del cliente" },
-  { Icono: MousePointerClick, texto: "Arrastra (o toca) ingredientes a la taza" },
-  { Icono: Coffee, texto: "Sirve, acierta y encadena combos" },
-];
+/** La carta que verá el jugador en el menú principal. */
+const CARTA: RecetaId[] = ["capuchino", "mokachino", "sandwich", "pastel", "pieLimon"];
 
 export function StartScreen({ recordPedidos, recordPropinas, onJugar, silenciado, onAlternarSilencio }: StartScreenProps) {
+  /* En móvil horizontal (poca altura) encogemos todo para que el botón
+     "Abrir la cafetería" siempre quede visible sin hacer scroll. */
+  const { bajo } = useViewport();
+
   return (
-    <div className="relative flex h-dvh flex-col items-center justify-center overflow-hidden px-4 text-center">
+    <div className="relative flex h-dvh flex-col items-center justify-center overflow-y-auto px-4 py-4 text-center">
       <Fondo />
 
       <button
@@ -39,21 +44,21 @@ export function StartScreen({ recordPedidos, recordPropinas, onJugar, silenciado
         initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 120, damping: 16 }}
-        className="relative z-10 flex w-full max-w-lg flex-col items-center gap-4"
+        className={`relative z-10 flex w-full max-w-lg flex-col items-center ${bajo ? "gap-2" : "gap-4"}`}
       >
         <motion.div
           animate={{ y: [0, -7, 0] }}
           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         >
-          <Mascot humor="idle" className="w-32 drop-shadow-xl sm:w-40" />
+          <Mascot humor="idle" className={`drop-shadow-xl ${bajo ? "w-20" : "w-32 sm:w-40"}`} />
         </motion.div>
 
-        <h1 className="font-display text-6xl font-extrabold leading-none text-[#6b4a2f] sm:text-7xl">
+        <h1 className={`font-display font-extrabold leading-none text-[#6b4a2f] ${bajo ? "text-4xl" : "text-6xl sm:text-7xl"}`}>
           Ratón <span className="text-[#c96f4a]">Café</span>
         </h1>
-        <p className="max-w-sm text-sm font-semibold text-cafe-sombra/80">
-          Una cafetería acogedora donde preparas bebidas por capas. Sirve pedidos
-          perfectos, encadena combos y bate tu récord antes de que acabe el turno.
+        <p className={`max-w-md font-semibold text-cafe-sombra/80 ${bajo ? "hidden" : "text-sm"}`}>
+          Los clientes llegan con prisa. Usa las estaciones, monta los pedidos en
+          la bandeja y sírvelos antes de que se cansen… ¡sin quemar nada!
         </p>
 
         {recordPedidos > 0 && (
@@ -72,26 +77,36 @@ export function StartScreen({ recordPedidos, recordPropinas, onJugar, silenciado
           onClick={onJugar}
           whileHover={{ scale: 1.06 }}
           whileTap={{ scale: 0.94 }}
-          className="mt-1 flex items-center gap-3 rounded-full bg-gradient-to-b from-[#d98a52] to-[#c96f4a] px-12 py-4 font-display text-2xl font-extrabold tracking-wide text-white shadow-[0_10px_26px_rgba(201,111,74,0.45)]"
+          className={`mt-1 flex items-center gap-3 rounded-full bg-gradient-to-b from-[#d98a52] to-[#c96f4a] font-display font-extrabold tracking-wide text-white shadow-[0_10px_26px_rgba(201,111,74,0.45)] ${
+            bajo ? "px-8 py-2.5 text-lg" : "px-12 py-4 text-2xl"
+          }`}
         >
-          <Play size={24} fill="currentColor" />
+          <Play size={bajo ? 19 : 24} fill="currentColor" />
           Abrir la cafetería
         </motion.button>
 
-        <ol className="mt-2 grid w-full max-w-md grid-cols-3 gap-2">
-          {PASOS.map(({ Icono, texto }, i) => (
-            <motion.li
-              key={texto}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35 + i * 0.12 }}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#ecdcbf] bg-[#fffdf6]/85 p-3 text-[11px] font-bold leading-tight text-cafe-sombra shadow-sm"
-            >
-              <Icono size={18} className="text-[#c98a4b]" />
-              {texto}
-            </motion.li>
-          ))}
-        </ol>
+        {/* La carta: lo que vas a aprender a preparar */}
+        <div className={`w-full ${bajo ? "hidden" : "mt-1"}`}>
+          <h2 className="mb-1.5 font-display text-xs font-extrabold uppercase tracking-[0.2em] text-[#a9722f]">
+            La carta
+          </h2>
+          <ul className="grid grid-cols-5 gap-1.5">
+            {CARTA.map((id, i) => (
+              <motion.li
+                key={id}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + i * 0.09 }}
+                className="flex flex-col items-center gap-0.5 rounded-2xl border border-[#ecdcbf] bg-[#fffdf6]/90 p-1.5 shadow-sm"
+              >
+                <DishSVG receta={id} className="h-11 w-full" />
+                <span className="text-center text-[9px] font-bold leading-tight text-cafe-sombra">
+                  {RECETAS[id].nombre}
+                </span>
+              </motion.li>
+            ))}
+          </ul>
+        </div>
       </motion.div>
     </div>
   );

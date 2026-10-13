@@ -1,30 +1,38 @@
 /**
- * GameScreen — La barra de la cafetería en pleno turno.
+ * GameScreen — El turno en la cafetería (estilo Overcooked).
  * ------------------------------------------------------------------
- * Orquesta: pedido actual, bebida del jugador, cronómetro con bonificación,
- * combo multiplicador, confetti, vuelo de la taza y las reacciones del ratón.
+ * BUCLE DE JUEGO
+ *  1. Llegan clientes con su pedido y una barra de paciencia.
+ *  2. Tocas estaciones para producir ingredientes → caen en la bandeja.
+ *     Las que llevan tiempo hay que recogerlas antes de que se quemen.
+ *  3. Cuando la bandeja forma un plato, la tarjeta del cliente que lo
+ *     pidió se ilumina en verde: la tocas y sirves (propinas + combo).
+ *  4. Si un cliente se cansa, se va: pierdes el combo.
  *
- * Responsive: con `useIsPortrait` reorganiza la mesa sin desmontar el estado
- * (girar el móvil a mitad de partida NO pierde ni la bebida ni el pedido).
+ * Todo el reloj se calcula con timestamps (Date.now) y un único
+ * intervalo de 100 ms: nada de temporizadores sueltos por componente.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Trash2, Undo2 } from "lucide-react";
+import { Coach } from "../components/Coach";
 import { Confetti } from "../components/Confetti";
-import { CupSVG } from "../components/CupSVG";
 import { Fondo } from "../components/Fondo";
 import { HUD } from "../components/HUD";
-import { IngredientBar } from "../components/IngredientBar";
 import { Mascot } from "../components/Mascot";
-import { Ticket } from "../components/Ticket";
-import { useIsPortrait } from "../hooks/useIsPortrait";
-import { BONUS_SEGUNDOS, MAX_BASES, SEGUNDOS_PARTIDA, UMBRAL_TIEMPO_BAJO, dificultadPara } from "../game/balance";
-import { SIROPES } from "../game/data";
-import { aplicarIngrediente, bebidaVacia, coincidePedido, deshacerUltima, generarPedido, puntosPorAcierto } from "../game/logic";
+import { OrderQueue } from "../components/OrderQueue";
+import { StationGrid } from "../components/StationGrid";
+import { Tray } from "../components/Tray";
+import { useViewport } from "../hooks/useViewport";
+import {
+  BONUS_SEGUNDOS, MAX_BANDEJA, SEGUNDOS_PARTIDA, UMBRAL_TIEMPO_BAJO, dificultadPara,
+} from "../game/balance";
+import { ESTACIONES, ORDEN_ESTACIONES, RECETAS } from "../game/recipes";
+import { analizarBandeja, bandejaCoincide, generarPedido, pedidoQueCoincide, puntosPorServir } from "../game/logic";
 import { sonido } from "../game/sound";
 import { guardarRecord } from "../game/storage";
-import type { Accion, Bebida, HumorMascota, Pedido, ResultadoPartida, SiropeId } from "../game/types";
+import { IngGlyph } from "../components/Art";
+import type { Estacion, HumorMascota, IngredienteId, Pedido, RecetaId, ResultadoPartida } from "../game/types";
 
 export interface GameScreenProps {
   onFin: (resultado: ResultadoPartida) => void;
@@ -32,258 +40,356 @@ export interface GameScreenProps {
   onAlternarSilencio: () => void;
 }
 
-/** Texto flotante "+puntos · +Ns" que sube tras un pedido perfecto. */
+/** Texto flotante de recompensa. */
 interface Flotante {
   id: number;
   texto: string;
+  bueno: boolean;
+}
+
+/** Ingrediente volando de la estación a la bandeja (puro gozo visual). */
+interface Vuelo {
+  id: number;
+  ing: IngredienteId;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Estado inicial de las 9 estaciones (todas libres). */
+function estacionesIniciales(): Record<IngredienteId, Estacion> {
+  const base = {} as Record<IngredienteId, Estacion>;
+  for (const id of ORDEN_ESTACIONES) base[id] = { estado: "libre", desde: 0 };
+  return base;
 }
 
 export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreenProps) {
-  const retrato = useIsPortrait();
+  const vp = useViewport();
+  const denso = vp.bajo || vp.compacto;
 
-  /* ------------------------- Estado de la partida ------------------------- */
-  const semilla = useMemo(() => Date.now() % 100000, []);
-  const [pedidoId, setPedidoId] = useState(1);
-  const [pedido, setPedido] = useState<Pedido>(() => generarPedido(1, dificultadPara(0), semilla));
-  const [bebida, setBebida] = useState<Bebida>(bebidaVacia);
-  const [historial, setHistorial] = useState<Accion[]>([]);
+  /* ----------------------------- Estado ----------------------------- */
+  const [ahora, setAhora] = useState(() => Date.now());
   const [tiempoMs, setTiempoMs] = useState(SEGUNDOS_PARTIDA * 1000);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [estaciones, setEstaciones] = useState<Record<IngredienteId, Estacion>>(estacionesIniciales);
+  const [bandeja, setBandeja] = useState<IngredienteId[]>([]);
+  const [puntos, setPuntos] = useState(0);
   const [racha, setRacha] = useState(0);
   const [mejorRacha, setMejorRacha] = useState(0);
-  const [puntos, setPuntos] = useState(0);
-  const [pedidosOk, setPedidosOk] = useState(0);
-  /* ------------------------- Efectos y presentación ----------------------- */
+  const [servidos, setServidos] = useState(0);
+  const [perdidos, setPerdidos] = useState(0);
+  /* --------------------------- Presentación ------------------------- */
   const [humor, setHumor] = useState<HumorMascota>("idle");
   const [sacudida, setSacudida] = useState(0);
+  const [rechazadoId, setRechazadoId] = useState<number | null>(null);
   const [confettiId, setConfettiId] = useState(0);
   const [flotantes, setFlotantes] = useState<Flotante[]>([]);
-  const [vertido, setVertido] = useState<{ clave: number; color: string } | null>(null);
-  const [arrastrando, setArrastrando] = useState(false);
-  const [bloqueado, setBloqueado] = useState(false);
+  const [vuelos, setVuelos] = useState<Vuelo[]>([]);
+  const [arrastrandoIng, setArrastrandoIng] = useState(false);
+  /* Guía inicial: el turno NO empieza hasta que la cierras */
+  const [coach, setCoach] = useState(true);
+  /* Pausa manual (botón del HUD) */
+  const [pausaManual, setPausaManual] = useState(false);
 
-  const dropRef = useRef<HTMLDivElement | null>(null);
+  /* Zonas de destino para arrastrar */
+  const trayRef = useRef<HTMLElement | null>(null);
+  const tarjetasRef = useRef<Map<number, HTMLElement>>(new Map());
+  const registrarTarjeta = useCallback((id: number, el: HTMLElement | null) => {
+    if (el) tarjetasRef.current.set(id, el);
+    else tarjetasRef.current.delete(id);
+  }, []);
+
+  /* Refs espejo: el bucle los lee sin re-suscribirse en cada render */
+  const pedidosRef = useRef(pedidos);
+  pedidosRef.current = pedidos;
+  const estacionesRef = useRef(estaciones);
+  estacionesRef.current = estaciones;
+  const servidosRef = useRef(servidos);
+  servidosRef.current = servidos;
+
+  const siguienteIdRef = useRef(1);
+  const proximoSpawnRef = useRef(0);
+  /* Espejo de la pausa para leerlo dentro del intervalo sin recrearlo */
+  const pausadoRef = useRef(true);
   const finalizadoRef = useRef(false);
   const ultimoSegundoRef = useRef(SEGUNDOS_PARTIDA);
   const temporizadoresRef = useRef<number[]>([]);
 
-  /** setTimeout con registro para limpiar TODO al desmontar. */
-  const despues = (ms: number, fn: () => void) => {
+  const despues = useCallback((ms: number, fn: () => void) => {
     temporizadoresRef.current.push(window.setTimeout(fn, ms));
-  };
+  }, []);
   useEffect(() => {
     const lista = temporizadoresRef.current;
     return () => lista.forEach((id) => window.clearTimeout(id));
   }, []);
 
-  /* ------------------------------ Cronómetro ------------------------------ */
-  useEffect(() => {
-    const id = window.setInterval(() => setTiempoMs((t) => Math.max(0, t - 100)), 100);
-    return () => window.clearInterval(id);
+  /* Pausa efectiva = guía abierta o pausa manual. El primer cliente
+     llega justo al reanudar (no mientras lees las instrucciones). */
+  const pausado = coach || pausaManual;
+  pausadoRef.current = pausado;
+
+  const alternarPausa = useCallback(() => {
+    sonido.clic();
+    setCoach(false);
+    setPausaManual((p) => !p);
   }, []);
 
-  /* Tic-tac de los últimos segundos + cierre del turno */
+  /** Cierra la guía y arranca el turno: el primer cliente entra ya. */
+  const empezarTurno = useCallback(() => {
+    sonido.clic();
+    setCoach(false);
+    proximoSpawnRef.current = Date.now() + 500;
+  }, []);
+
+  /** Añade un texto flotante efímero. */
+  const flotar = useCallback((texto: string, bueno: boolean) => {
+    const id = Date.now() + Math.random();
+    setFlotantes((f) => [...f, { id, texto, bueno }]);
+    despues(1000, () => setFlotantes((f) => f.filter((x) => x.id !== id)));
+  }, [despues]);
+
+  /* ------------------------- BUCLE PRINCIPAL -------------------------
+     Con PAUSA real: mientras está pausado desplazamos todos los relojes
+     (paciencia de clientes, cocción de estaciones y próxima llegada)
+     100 ms hacia delante, así nada avanza ni se quema. El primer cliente
+     entra justo cuando cierras la guía. */
   useEffect(() => {
-    const segundos = Math.ceil(tiempoMs / 1000);
-    if (segundos !== ultimoSegundoRef.current) {
-      ultimoSegundoRef.current = segundos;
-      if (segundos > 0 && segundos <= UMBRAL_TIEMPO_BAJO) sonido.tic();
+    const intervalo = window.setInterval(() => {
+      const t = Date.now();
+      setAhora(t);
+
+      if (pausadoRef.current) {
+        // Congelamos el mundo: todo se mueve con nosotros.
+        setPedidos((ps) => ps.map((p) => ({ ...p, nacido: p.nacido + 100 })));
+        setEstaciones((es) => {
+          const copia = { ...es };
+          for (const id of ORDEN_ESTACIONES) {
+            if (copia[id].estado === "trabajando" || copia[id].estado === "listo") {
+              copia[id] = { ...copia[id], desde: copia[id].desde + 100 };
+            }
+          }
+          return copia;
+        });
+        proximoSpawnRef.current += 100;
+        return; // ni cronómetro, ni clientes, ni quemados
+      }
+
+      setTiempoMs((prev) => Math.max(0, prev - 100));
+
+      /* --- 1. Estaciones: trabajando → listo → quemado --- */
+      const est = estacionesRef.current;
+      let cambio = false;
+      const nuevas: Record<IngredienteId, Estacion> = { ...est };
+      for (const id of ORDEN_ESTACIONES) {
+        const def = ESTACIONES[id];
+        const st = est[id];
+        if (st.estado === "trabajando" && t - st.desde >= def.tiempo) {
+          nuevas[id] = { ...st, estado: "listo" };
+          cambio = true;
+          sonido.campana();
+        } else if (st.estado === "listo" && def.margen > 0 && t - st.desde >= def.tiempo + def.margen) {
+          nuevas[id] = { ...st, estado: "quemado" };
+          cambio = true;
+          sonido.quemado();
+        }
+      }
+      if (cambio) setEstaciones(nuevas);
+
+      /* --- 2. Clientes que se cansan y se van --- */
+      const vivos = pedidosRef.current.filter((p) => t - p.nacido < p.paciencia);
+      if (vivos.length !== pedidosRef.current.length) {
+        const idos = pedidosRef.current.length - vivos.length;
+        setPedidos(vivos);
+        setPerdidos((n) => n + idos);
+        setRacha(0);
+        setHumor("preocupado");
+        sonido.clienteSeVa();
+        flotar("¡Se fue! 😿", false);
+        despues(1500, () => setHumor("idle"));
+      }
+
+      /* --- 3. Llegada de clientes nuevos --- */
+      const dif = dificultadPara(servidosRef.current);
+      if (vivos.length < dif.maxPedidos && t >= proximoSpawnRef.current) {
+        const nuevo = generarPedido(siguienteIdRef.current++, servidosRef.current, dif.paciencia, t);
+        setPedidos((prev) => [...prev, nuevo]);
+        proximoSpawnRef.current = t + dif.intervalo;
+        sonido.campanilla();
+      }
+    }, 100);
+    return () => window.clearInterval(intervalo);
+  }, [despues, flotar]);
+
+  /* Tic-tac final y cierre del turno */
+  useEffect(() => {
+    const seg = Math.ceil(tiempoMs / 1000);
+    if (seg !== ultimoSegundoRef.current) {
+      ultimoSegundoRef.current = seg;
+      if (seg > 0 && seg <= UMBRAL_TIEMPO_BAJO) sonido.tic();
     }
     if (tiempoMs <= 0 && !finalizadoRef.current) {
       finalizadoRef.current = true;
-      const esRecord = guardarRecord(pedidosOk, puntos);
+      const esRecord = guardarRecord(servidos, puntos);
       if (esRecord) sonido.fanfarria();
-      onFin({ pedidos: pedidosOk, propinas: puntos, mejorCombo: mejorRacha, esRecord });
+      onFin({ pedidos: servidos, propinas: puntos, mejorCombo: mejorRacha, esRecord, perdidos });
     }
-  }, [tiempoMs, pedidosOk, puntos, mejorRacha, onFin]);
+  }, [tiempoMs, servidos, puntos, mejorRacha, perdidos, onFin]);
 
-  /* ------------------------------ Acciones -------------------------------- */
-  const agregar = (accion: Accion) => {
-    if (bloqueado) return;
-    const nueva = aplicarIngrediente(bebida, accion);
-    if (!nueva) {
-      sonido.taza(); // p. ej. 4ª base: la taza dice "basta" con un clinc
-      return;
-    }
-    setBebida(nueva);
-    setHistorial((h) => [...h, accion]);
-    switch (accion.categoria) {
-      case "base":
-        sonido.molinillo();
-        break;
-      case "leche":
-        sonido.vapor();
-        break;
-      case "sirope":
-        sonido.vertido();
-        setVertido({ clave: Date.now(), color: SIROPES[accion.id as SiropeId].color });
-        break;
-      case "topping":
-        sonido.pop();
-        break;
-    }
-  };
+  /* --------------------------- Interacción --------------------------- */
 
-  const deshacer = () => {
-    if (bloqueado || historial.length === 0) return;
-    const resultado = deshacerUltima(bebida, historial);
-    setBebida(resultado.bebida);
-    setHistorial(resultado.historial);
-    sonido.taza();
-  };
+  /** Lanza la animación del ingrediente volando hacia la bandeja. */
+  const volar = useCallback((ing: IngredienteId, origen: DOMRect) => {
+    const destino = trayRef.current?.getBoundingClientRect();
+    if (!destino) return;
+    const id = Date.now() + Math.random();
+    setVuelos((v) => [
+      ...v,
+      {
+        id, ing,
+        x0: origen.left + origen.width / 2 - 18,
+        y0: origen.top + origen.height / 2 - 18,
+        x1: destino.left + destino.width / 2 - 18,
+        y1: destino.top + destino.height / 2 - 18,
+      },
+    ]);
+    despues(460, () => setVuelos((v) => v.filter((x) => x.id !== id)));
+  }, [despues]);
 
-  const limpiar = () => {
-    if (bloqueado || historial.length === 0) return;
-    setBebida(bebidaVacia());
-    setHistorial([]);
-    sonido.taza();
-  };
-
-  const servir = () => {
-    if (bloqueado) return;
-    // Servir una taza vacía no rompe el combo: solo un aviso amable.
-    if (bebida.bases.length === 0 && !bebida.leche && bebida.siropes.length === 0 && bebida.toppings.length === 0) {
+  /** Mete un ingrediente en la bandeja (si cabe). */
+  const aBandeja = useCallback((id: IngredienteId, origen?: DOMRect) => {
+    if (bandeja.length >= MAX_BANDEJA) {
       setSacudida((s) => s + 1);
-      sonido.taza();
-      return;
-    }
-
-    if (coincidePedido(bebida, pedido.bebida)) {
-      /* ------------------------- ¡PEDIDO PERFECTO! ------------------------- */
-      const nuevaRacha = racha + 1;
-      const pts = puntosPorAcierto(nuevaRacha);
-      sonido.exito();
-      setRacha(nuevaRacha);
-      setMejorRacha((m) => Math.max(m, nuevaRacha));
-      setPuntos((p) => p + pts);
-      setPedidosOk((n) => n + 1);
-      setTiempoMs((t) => t + BONUS_SEGUNDOS * 1000); // bonificación de tiempo
-      setHumor("feliz");
-      despues(1400, () => setHumor("idle"));
-      setConfettiId(Date.now());
-      despues(1200, () => setConfettiId(0));
-      const idFlotante = Date.now();
-      setFlotantes((f) => [...f, { id: idFlotante, texto: `+${pts} · +${BONUS_SEGUNDOS}s` }]);
-      despues(950, () => setFlotantes((f) => f.filter((x) => x.id !== idFlotante)));
-
-      /* La taza sale volando hacia el cliente: cambia la key, la nueva entra
-         con rebote y la anterior (con su bebida) se anima de salida. */
-      setBloqueado(true);
-      const siguiente = pedidoId + 1;
-      setPedidoId(siguiente);
-      setBebida(bebidaVacia());
-      setHistorial([]);
-      setVertido(null);
-      setPedido(generarPedido(siguiente, dificultadPara(pedidosOk + 1), semilla));
-      despues(600, () => setBloqueado(false));
-    } else {
-      /* --------- Fallo: combo roto, vibra la barra, la bebida queda -------- */
       sonido.error();
-      setRacha(0);
-      setSacudida((s) => s + 1);
-      setHumor("preocupado");
-      despues(1600, () => setHumor("idle"));
+      flotar("¡Bandeja llena!", false);
+      return;
     }
+    if (origen) volar(id, origen);
+    setBandeja((b) => [...b, id]);
+    sonido.pop();
+  }, [bandeja.length, flotar, volar]);
+
+  /** Toque/suelta sobre una estación: arranca, recoge o tira lo quemado. */
+  const tocarEstacion = (id: IngredienteId, rect: DOMRect) => {
+    const def = ESTACIONES[id];
+    const st = estaciones[id];
+
+    if (def.tiempo === 0) {
+      aBandeja(id, rect); // vitrina / dispensador: instantáneo
+      return;
+    }
+    if (st.estado === "libre") {
+      setEstaciones((e) => ({ ...e, [id]: { estado: "trabajando", desde: Date.now() } }));
+      if (id === "espresso") sonido.molinillo();
+      else if (id === "lecheVapor") sonido.vapor();
+      else sonido.sarten();
+      return;
+    }
+    if (st.estado === "listo") {
+      setEstaciones((e) => ({ ...e, [id]: { estado: "libre", desde: 0 } }));
+      aBandeja(id, rect);
+      return;
+    }
+    if (st.estado === "quemado") {
+      setEstaciones((e) => ({ ...e, [id]: { estado: "libre", desde: 0 } }));
+      sonido.basura();
+      flotar("A la basura", false);
+      return;
+    }
+    sonido.taza(); // está trabajando: paciencia
   };
 
-  /* -------------------------- Derivados visuales -------------------------- */
+  /** Quita un ingrediente concreto de la bandeja (toque sobre su casilla). */
+  const quitarDeBandeja = (indice: number) => {
+    setBandeja((b) => b.filter((_, i) => i !== indice));
+    sonido.taza();
+  };
+
+  /** Devuelve el pedido cuya tarjeta está bajo esas coordenadas. */
+  const buscarPedidoEn = useCallback((x: number, y: number): Pedido | null => {
+    for (const [id, el] of tarjetasRef.current) {
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        return pedidosRef.current.find((p) => p.id === id) ?? null;
+      }
+    }
+    return null;
+  }, []);
+
+  /** Sirve la bandeja a un cliente concreto. */
+  const servir = (pedido: Pedido) => {
+    if (!bandejaCoincide(bandeja, pedido.receta)) {
+      /* Entregar al cliente equivocado ya no rompe el combo: solo avisa.
+         Castigar un error de puntería era frustrante, no divertido. */
+      setRechazadoId(pedido.id);
+      despues(450, () => setRechazadoId(null));
+      setSacudida((s) => s + 1);
+      flotar(`${RECETAS[pedido.receta].nombre}, no`, false);
+      sonido.error();
+      return;
+    }
+
+    /* ¡Pedido correcto! */
+    const nuevaRacha = racha + 1;
+    const restante = Math.max(0, 1 - (Date.now() - pedido.nacido) / pedido.paciencia);
+    const pts = puntosPorServir(pedido.receta, nuevaRacha, restante);
+
+    setPedidos((prev) => prev.filter((p) => p.id !== pedido.id));
+    setBandeja([]);
+    setRacha(nuevaRacha);
+    setMejorRacha((m) => Math.max(m, nuevaRacha));
+    setPuntos((p) => p + pts);
+    setServidos((n) => n + 1);
+    setTiempoMs((t) => t + BONUS_SEGUNDOS * 1000);
+    setHumor("feliz");
+    despues(1300, () => setHumor("idle"));
+    setConfettiId(Date.now());
+    despues(1200, () => setConfettiId(0));
+    flotar(`+${pts} · +${BONUS_SEGUNDOS}s`, true);
+    sonido.exito();
+  };
+
+  const limpiarBandeja = () => {
+    if (bandeja.length === 0) return;
+    setBandeja([]);
+    sonido.basura();
+  };
+
+  /* --------------------------- Derivados ----------------------------- */
   const tiempoBajo = tiempoMs <= UMBRAL_TIEMPO_BAJO * 1000;
-  const humorVisible: HumorMascota = humor !== "idle" ? humor : tiempoBajo ? "preocupado" : "idle";
-  const tazaVacia = bebida.bases.length === 0 && !bebida.leche && bebida.siropes.length === 0 && bebida.toppings.length === 0;
+  /**
+   * Análisis en vivo de la bandeja: qué plato estás montando, qué falta
+   * y qué sobra. Prioriza las recetas que los clientes piden ahora mismo;
+   * si no hay nadie, considera toda la carta.
+   */
+  const analisis = useMemo(() => {
+    const deClientes = [...new Set(pedidos.map((p) => p.receta))];
+    const candidatas = deClientes.length > 0 ? deClientes : (Object.keys(RECETAS) as RecetaId[]);
+    return analizarBandeja(bandeja, candidatas);
+  }, [bandeja, pedidos]);
+  const recetaLista = analisis.completa ? analisis.receta : null;
+  /** pedido al que le sirve la bandeja (se ilumina en verde) */
+  const servible = useMemo(() => pedidoQueCoincide(bandeja, pedidos), [bandeja, pedidos]);
 
-  /** Zona central: la taza protagonista + botones de acción. */
-  const zonaTaza = (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-2">
-      <div
-        ref={dropRef}
-        className={`relative flex min-h-0 w-full flex-1 items-center justify-center rounded-3xl transition-all duration-300 ${
-          arrastrando ? "bg-white/25 shadow-[inset_0_0_0_4px_rgba(201,138,75,0.55)]" : ""
-        }`}
-      >
-        <AnimatePresence>
-          <motion.div
-            key={pedidoId} // cada pedido nuevo = taza nueva que baja con rebote
-            /* absolute: la taza saliente (volando) y la entrante (rebotando)
-               se solapan centradas sin empujar el layout */
-            className="absolute inset-0 flex items-center justify-center"
-            initial={{ y: -160, opacity: 0, scale: 0.9 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ x: 320, y: -180, rotate: 26, opacity: 0 }}
-            transition={
-              /* entrada con physics de muelle (rebote); salida volando */
-              { type: "spring", stiffness: 250, damping: 17 }
-            }
-          >
-            <CupSVG bebida={bebida} vertido={vertido} className="h-full w-auto max-w-[46vw] drop-shadow-xl" />
-          </motion.div>
-        </AnimatePresence>
-
-        <AnimatePresence>{confettiId > 0 && <Confetti key={confettiId} semilla={confettiId} />}</AnimatePresence>
-
-        {/* Flotantes de puntos */}
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-40 flex flex-col items-center">
-          <AnimatePresence>
-            {flotantes.map((f) => (
-              <motion.span
-                key={f.id}
-                initial={{ opacity: 0, y: 10, scale: 0.8 }}
-                animate={{ opacity: 1, y: -16, scale: 1.05 }}
-                exit={{ opacity: 0 }}
-                className="font-display text-lg font-extrabold text-[#7f9c67] drop-shadow-[0_2px_6px_rgba(255,255,255,0.9)]"
-              >
-                {f.texto}
-              </motion.span>
-            ))}
-          </AnimatePresence>
-        </div>
-
-        {tazaVacia && (
-          <p className="pointer-events-none absolute bottom-1 text-[11px] font-semibold text-cafe-sombra/50">
-            Arrastra o toca ingredientes para llenar la taza
-          </p>
-        )}
-      </div>
-
-      {/* El ratoncito barista vigila el turno desde la esquina de la barra.
-          Integrado en la zona de la taza: reacciona sin tapar los botones. */}
-      <Mascot
-        humor={humorVisible}
-        className="pointer-events-none absolute bottom-16 left-0 z-20 w-14 drop-shadow-lg sm:w-16 lg:bottom-10 lg:left-2 lg:w-24"
-      />
-
-      {/* Botones de acción: siempre a un toque */}
-      <div className="flex shrink-0 items-center gap-3 pb-1">
-        <motion.button
-          onClick={deshacer}
-          whileTap={{ scale: 0.86 }}
-          disabled={historial.length === 0}
-          aria-label="Deshacer último ingrediente"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-[#ecdcbf] bg-white/85 text-cafe-sombra shadow-md transition-opacity disabled:opacity-35"
-        >
-          <Undo2 size={17} />
-        </motion.button>
-
-        <motion.button
-          onClick={servir}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.92 }}
-          className="flex h-13 items-center gap-2 rounded-full bg-gradient-to-b from-[#d98a52] to-[#c96f4a] px-9 py-3 font-display text-lg font-extrabold tracking-[0.12em] text-white shadow-[0_8px_22px_rgba(201,111,74,0.45)]"
-        >
-          <Check size={20} strokeWidth={3} />
-          SERVIR
-        </motion.button>
-
-        <motion.button
-          onClick={limpiar}
-          whileTap={{ scale: 0.86 }}
-          disabled={historial.length === 0}
-          aria-label="Limpiar la taza"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-[#ecdcbf] bg-white/85 text-cafe-sombra shadow-md transition-opacity disabled:opacity-35"
-        >
-          <Trash2 size={17} />
-        </motion.button>
-      </div>
-    </div>
-  );
+  /**
+   * CAPA TÁCTICA: cuántas unidades de cada ingrediente hacen falta para
+   * todos los clientes que esperan, descontando lo que ya tienes en la
+   * bandeja. Alimenta los badges numéricos de las estaciones.
+   */
+  const necesarios = useMemo(() => {
+    const cuenta: Partial<Record<IngredienteId, number>> = {};
+    for (const p of pedidos) {
+      for (const paso of RECETAS[p.receta].pasos) {
+        cuenta[paso] = (cuenta[paso] ?? 0) + 1;
+      }
+    }
+    for (const ing of bandeja) {
+      if (cuenta[ing]) cuenta[ing] = cuenta[ing]! - 1;
+    }
+    return cuenta;
+  }, [pedidos, bandeja]);
+  const humorVisible: HumorMascota =
+    humor !== "idle" ? humor : servible ? "feliz" : tiempoBajo ? "preocupado" : "idle";
 
   return (
     <div className="relative flex h-dvh w-full touch-manipulation select-none flex-col overflow-hidden">
@@ -293,40 +399,120 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
         tiempoBajo={tiempoBajo}
         puntos={puntos}
         racha={racha}
-        pedidos={pedidosOk}
+        pedidos={servidos}
         silenciado={silenciado}
         onAlternarSilencio={onAlternarSilencio}
+        pausado={pausado}
+        onAlternarPausa={alternarPausa}
       />
 
-      {retrato ? (
-        /* ===== Celular en vertical: layout apilado ===== */
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-xl flex-col gap-2 px-3 pb-3 pt-12">
-          <Ticket pedido={pedido} compacto />
-          {zonaTaza}
-          <IngredientBar
-            onAgregar={agregar}
-            dropRef={dropRef}
-            basesLlenas={bebida.bases.length >= MAX_BASES}
-            horizontal
-            sacudida={sacudida}
-            onArrastrando={setArrastrando}
+      <div className={`relative z-10 mx-auto flex h-full w-full max-w-3xl flex-col gap-1.5 px-2 pb-2 ${denso ? "pt-7" : "pt-9"}`}>
+        {/* 1 · Clientes esperando */}
+        <div className="shrink-0 overflow-x-auto">
+          <OrderQueue
+            pedidos={pedidos}
+            ahora={ahora}
+            servibleId={servible?.id ?? null}
+            rechazadoId={rechazadoId}
+            onServir={servir}
+            registrarTarjeta={registrarTarjeta}
+            bandeja={bandeja}
+            sirviendo={recetaLista !== null}
+            denso={denso}
           />
         </div>
-      ) : (
-        /* ===== Horizontal / tablet / escritorio: tres columnas ===== */
-        <div className="relative z-10 mx-auto grid h-full w-full max-w-6xl grid-cols-[minmax(230px,300px)_minmax(0,1fr)_minmax(240px,300px)] gap-4 px-5 pb-5 pt-12">
-          <Ticket pedido={pedido} />
-          {zonaTaza}
-          <IngredientBar
-            onAgregar={agregar}
-            dropRef={dropRef}
-            basesLlenas={bebida.bases.length >= MAX_BASES}
-            horizontal={false}
-            sacudida={sacudida}
-            onArrastrando={setArrastrando}
+
+        {/* 2 · Bandeja + mascota (zona central, con confetti) */}
+        <div className="relative flex min-h-0 flex-1 items-center justify-center gap-2">
+          <Mascot humor={humorVisible} className={`shrink-0 drop-shadow-lg ${denso ? "w-12" : "w-20"}`} />
+          <div className="min-w-0 flex-1">
+            <Tray
+              bandeja={bandeja}
+              analisis={analisis}
+              onLimpiar={limpiarBandeja}
+              onQuitar={quitarDeBandeja}
+              buscarPedidoEn={buscarPedidoEn}
+              onServir={servir}
+              servible={servible}
+              sacudida={sacudida}
+              recibiendo={arrastrandoIng}
+              trayRef={trayRef}
+              denso={denso}
+            />
+          </div>
+
+          <AnimatePresence>{confettiId > 0 && <Confetti key={confettiId} semilla={confettiId} />}</AnimatePresence>
+          <AnimatePresence>{coach && <Coach onCerrar={empezarTurno} />}</AnimatePresence>
+
+          {/* Velo de pausa manual */}
+          <AnimatePresence>
+            {pausaManual && !coach && (
+              <motion.button
+                onClick={alternarPausa}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-[#f4e4cc]/80 backdrop-blur-sm"
+              >
+                <span className="font-display text-3xl font-extrabold text-[#6b4a2f]">Turno en pausa</span>
+                <span className="rounded-full bg-[#c96f4a] px-5 py-2 font-display text-sm font-extrabold text-white shadow-lg">
+                  Toca para continuar
+                </span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          {/* textos flotantes de recompensa */}
+          <div className="pointer-events-none absolute inset-x-0 -top-1 z-40 flex flex-col items-center">
+            <AnimatePresence>
+              {flotantes.map((f) => (
+                <motion.span
+                  key={f.id}
+                  initial={{ opacity: 0, y: 12, scale: 0.8 }}
+                  animate={{ opacity: 1, y: -14, scale: 1.05 }}
+                  exit={{ opacity: 0 }}
+                  className={`font-display text-base font-extrabold drop-shadow-[0_2px_6px_rgba(255,255,255,0.95)] ${
+                    f.bueno ? "text-[#6d8f54]" : "text-[#c4473f]"
+                  }`}
+                >
+                  {f.texto}
+                </motion.span>
+              ))}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Capa de ingredientes VOLANDO de la estación a la bandeja */}
+        <div className="pointer-events-none fixed inset-0 z-[60]">
+          <AnimatePresence>
+            {vuelos.map((v) => (
+              <motion.div
+                key={v.id}
+                className="absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#ecdcbf] bg-white shadow-lg"
+                initial={{ x: v.x0, y: v.y0, scale: 1.15, opacity: 1, rotate: -10 }}
+                animate={{ x: v.x1, y: v.y1, scale: 0.55, opacity: 0.9, rotate: 12 }}
+                exit={{ opacity: 0, scale: 0.3 }}
+                transition={{ duration: 0.42, ease: [0.3, 0.8, 0.4, 1] }}
+              >
+                <IngGlyph id={v.ing} size={24} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {/* 3 · La cocina */}
+        <div className="shrink-0">
+          <StationGrid
+            estaciones={estaciones}
+            ahora={ahora}
+            onTocar={tocarEstacion}
+            necesarios={necesarios}
+            trayRef={trayRef}
+            onArrastrando={setArrastrandoIng}
+            denso={denso}
           />
         </div>
-      )}
+      </div>
     </div>
   );
 }
