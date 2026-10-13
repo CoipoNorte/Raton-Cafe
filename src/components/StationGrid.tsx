@@ -14,6 +14,7 @@ import type { RefObject } from "react";
 import { motion, type PanInfo } from "framer-motion";
 import { Flame, Trash2 } from "lucide-react";
 import { COLOR_ZONA, ESTACIONES, ORDEN_ESTACIONES } from "../game/recipes";
+import { useTapSinArrastre } from "../hooks/useTapSinArrastre";
 import type { Estacion, IngredienteId, Zona } from "../game/types";
 import { IngGlyph } from "./Art";
 
@@ -49,6 +50,8 @@ export function StationGrid({
   estaciones, ahora, onTocar, necesarios, trayRef, onArrastrando, denso = false,
 }: StationGridProps) {
   const zonas: Zona[] = ["cafe", "cocina", "vitrina"];
+  /* Distingue "toque" de "arrastre": sin esto la acción se duplicaba. */
+  const gesto = useTapSinArrastre();
 
   /** ¿El puntero acabó dentro de la bandeja? */
   const sobreBandeja = (info: PanInfo): boolean => {
@@ -94,24 +97,30 @@ export function StationGrid({
                 return (
                   <motion.button
                     key={id}
-                    /* onTap (no onClick): framer-motion NO lo dispara después
-                       de un arrastre real, así evitamos la doble acción. */
+                    /* TOQUE: solo si NO hubo arrastre en este gesto.
+                       (Framer Motion dispara onTap también al soltar un
+                        arrastre, y eso duplicaba el ingrediente.) */
                     onTap={(e) => {
+                      if (!gesto.esTapLimpio()) return;
                       const el = (e.target as HTMLElement)?.closest("button");
                       if (el) onTocar(id, el.getBoundingClientRect());
                     }}
-                    /* --- arrastre hacia la bandeja --- */
+                    /* --- ARRASTRE hacia la bandeja --- */
                     drag={arrastrable}
                     dragSnapToOrigin
                     dragElastic={0.12}
                     whileDrag={{ scale: 1.2, zIndex: 70, boxShadow: "0 16px 32px rgba(75,44,26,0.4)" }}
-                    onDragStart={() => onArrastrando?.(true)}
+                    onDragStart={() => {
+                      gesto.alIniciarArrastre();
+                      onArrastrando?.(true);
+                    }}
                     onDragEnd={(e, info) => {
                       onArrastrando?.(false);
                       if (sobreBandeja(info)) {
-                        const el = e.target as HTMLElement;
-                        onTocar(id, el.getBoundingClientRect());
+                        const el = (e.target as HTMLElement)?.closest("button");
+                        onTocar(id, (el ?? (e.target as HTMLElement)).getBoundingClientRect());
                       }
+                      gesto.alTerminarArrastre();
                     }}
                     whileTap={{ scale: 0.9 }}
                     animate={

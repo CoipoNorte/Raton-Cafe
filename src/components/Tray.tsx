@@ -13,6 +13,7 @@ import { AnimatePresence, motion, type PanInfo } from "framer-motion";
 import { Trash2 } from "lucide-react";
 import { MAX_BANDEJA } from "../game/balance";
 import { ESTACIONES, RECETAS } from "../game/recipes";
+import { useTapSinArrastre } from "../hooks/useTapSinArrastre";
 import type { AnalisisBandeja } from "../game/logic";
 import type { IngredienteId, Pedido } from "../game/types";
 import { DishSVG, IngGlyph } from "./Art";
@@ -44,6 +45,9 @@ export function Tray({
   const casilla = denso ? "h-10 w-10" : "h-13 w-13";
   const tamIcono = denso ? 23 : 30;
   const { receta, faltan, sobran, completa } = analisis;
+  /* Igual que en la cocina: el plato se puede tocar O arrastrar, pero
+     nunca ambas cosas en el mismo gesto (si no, se servía dos veces). */
+  const gesto = useTapSinArrastre();
   /* huecos realmente vacíos (ni llenos ni fantasma) */
   const vacios = Math.max(0, MAX_BANDEJA - bandeja.length - faltan.length);
 
@@ -80,8 +84,13 @@ export function Tray({
               dragSnapToOrigin
               dragElastic={0.1}
               whileDrag={{ scale: 1.35, zIndex: 80 }}
-              onDragEnd={(_, info) => soltarPlato(info)}
+              onDragStart={gesto.alIniciarArrastre}
+              onDragEnd={(_, info) => {
+                soltarPlato(info);
+                gesto.alTerminarArrastre();
+              }}
               onTap={() => {
+                if (!gesto.esTapLimpio()) return; // venía de un arrastre
                 if (completa && servible) onServir(servible);
               }}
               initial={{ scale: 0.5, opacity: 0, rotate: -12 }}
