@@ -1,4 +1,4 @@
-# Ratón Café
+# [Ratón Café](https://coiponorte.github.io/Raton-Cafe/)
 
 > Una acogedora cafetería artesanal en tu bolsillo: prepara bebidas por capas, sirve pedidos perfectos y bate tu récord antes de que acabe el turno.
 
@@ -130,76 +130,6 @@ Raton-Cafe/
     │   └── Confetti.tsx · Fondo.tsx
     └── screens/            # StartScreen · GameScreen · EndScreen
 ```
-
-## Desarrollo local
-
-```bash
-npm i          # instala dependencias
-npm run dev    # servidor de desarrollo con recarga en caliente
-npm run build  # compila a dist/
-npm run preview# vista previa local de la build
-```
-
-## Despliegue en GitHub Pages
-
-### Opción A — automática (Windows): `deploy.bat`
-
-Doble clic en **`deploy.bat`** y listo. Ahora guarda el código fuente en GitHub y publica el juego en una sola operación:
-
-1. Comprueba que `npm` existe (si no, avisa y sale).
-2. Comprueba Git, el repositorio, el remoto `origin` y detecta la rama actual.
-3. Añade los scripts `predeploy`/`deploy` a `package.json` **editándolo con `node -e`** (no rompe el JSON).
-4. Verifica e inserta `base: '/Raton-Cafe/'` en `vite.config.ts` si faltara.
-5. Ejecuta `npm i`.
-6. Ejecuta `npm run build`; si la compilación falla, no sube ni publica nada.
-7. Ejecuta `git add -A` y crea un commit automático **solo si hay cambios**.
-8. Hace `git push` de la rama actual a `origin` (normalmente `main`).
-9. Publica `dist/` con `npx gh-pages -d dist`.
-
-El mensaje usado para cada commit automático es `Actualizacion automatica de Raton Cafe`. Si no hay cambios pendientes, el paso de commit se omite sin producir un error, pero el script verifica igualmente el `push` y despliega la versión compilada.
-
-La primera vez, Git puede pedir tu identidad. Configúrala una sola vez:
-
-```bash
-git config --global user.name "Tu Nombre"
-git config --global user.email "tu-correo@ejemplo.com"
-```
-
-Al terminar, **la primera vez**, activa Pages:
-
-> **GitHub → tu repo → Settings → Pages → Build and deployment → Branch: `gh-pages` · Folder: `/ (root)`**
-
-Tu juego quedará en: **https://coiponorte.github.io/Raton-Cafe/**
-
-### Opción B — manual
-
-```bash
-npm i
-npm run build
-npx gh-pages -d dist          # crea/actualiza la rama gh-pages con dist/
-# o, tras ejecutar deploy.bat una vez:
-npm run deploy                # hace predeploy (build) + gh-pages -d dist
-```
-
-> **Nota técnica:** el `base: '/Raton-Cafe/'` debe coincidir exactamente con el nombre del repositorio. Si renombras el repo, actualiza `vite.config.ts` (o vuelve a ejecutar `deploy.bat`, que lo corrige).
-
-## Solución de problemas
-
-| Síntoma | Causa más probable | Solución |
-| --- | --- | --- |
-| **Página totalmente en blanco** al abrir la URL | **Pages está sirviendo la rama `main` en vez de `gh-pages`.** GitHub muestra el `index.html` de desarrollo, que pide `/src/main.tsx` y da 404. Es la causa del 99 % de los fallos. | Settings → Pages → Branch **`gh-pages`** · `/ (root)`. Guarda y espera 1-2 min. |
-| Sigue en blanco tras corregir la rama | **Caché del navegador** (guardó el HTML viejo) | Recarga forzada con **Ctrl+F5** (o Cmd+Shift+R). Abre también una ventana de incógnito para comprobar. |
-| Pantalla *"Preparando la cafetería…"* congelada | **Error de JavaScript** al arrancar | F12 → Consola. Suele ser un deploy antiguo; vuelve a ejecutar `deploy.bat` y recarga con Ctrl+F5. |
-| Carga el HTML pero el favicon o assets dan 404 | `base` de Vite distinto del nombre del repo | Debe ser exactamente `base: '/Raton-Cafe/'` en `vite.config.ts`. `deploy.bat` lo inserta/corrige solo. |
-| Carpetas de `_` no se publican | GitHub procesa el sitio con **Jekyll** | Ya está resuelto: `public/.nojekyll` se copia a `dist/` automáticamente. Verifica que exista en la rama `gh-pages`. |
-| `gh-pages` falla con error de permisos | Remoto sin credenciales | `git remote -v` debe apuntar a `https://github.com/coiponorte/Raton-Cafe.git`; inicia sesión con GitHub CLI (`gh auth login`) o credenciales de Git. |
-| `deploy.bat` falla en el paso 2 | `package.json` corrupto o bloqueado | Cierra editores con el archivo abierto y restaura `package.json` (`git checkout -- package.json`) antes de reintentar. |
-| El récord no se guarda (modo incógnito) | El navegador bloquea localStorage | Es normal en incógnito: `src/game/storage.ts` usa un respaldo en memoria para esa sesión. |
-
-### Notas de arquitectura
-
-- **`src/game/storage.ts`** es el único punto que toca `localStorage` (esquema versionado + *fallback* en memoria). Para migrar a **IndexedDB** basta reescribir `leerDisco`/`escribirDisco` con la misma forma de datos: el resto del juego no se entera.
-- El audio se genera con **WebAudio** en tiempo real; no hay archivos de sonido que descargar ni que fallen en la caché.
 
 ---
 
