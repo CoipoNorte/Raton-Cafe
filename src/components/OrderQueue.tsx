@@ -27,14 +27,25 @@ export interface OrderQueueProps {
   bandeja: IngredienteId[];
   /** true mientras arrastras el plato: las tarjetas invitan a soltar */
   sirviendo?: boolean;
+  /** columna vertical (escritorio) en vez de fila horizontal (móvil) */
+  vertical?: boolean;
   denso?: boolean;
 }
 
 export function OrderQueue({
-  pedidos, ahora, servibleId, rechazadoId, onServir, registrarTarjeta, bandeja, sirviendo = false, denso = false,
+  pedidos, ahora, servibleId, rechazadoId, onServir, registrarTarjeta, bandeja,
+  sirviendo = false, vertical = false, denso = false,
 }: OrderQueueProps) {
   return (
-    <div className="flex w-full items-stretch justify-center gap-2" role="list" aria-label="Clientes esperando">
+    <div
+      role="list"
+      aria-label="Clientes esperando"
+      className={
+        vertical
+          ? "scroll-cafe flex h-full w-full flex-col items-stretch gap-2 overflow-y-auto pr-0.5"
+          : "flex w-full items-stretch justify-center gap-2"
+      }
+    >
       <AnimatePresence mode="popLayout">
         {pedidos.map((p) => {
           const receta = RECETAS[p.receta];
@@ -58,7 +69,9 @@ export function OrderQueue({
               exit={{ opacity: 0, scale: 0.7, y: -30, transition: { duration: 0.25 } }}
               transition={{ type: "spring", stiffness: 300, damping: 22 }}
               aria-label={`Pedido de ${p.cliente}: ${receta.nombre}${servible ? " — listo para servir" : ""}`}
-              className={`relative flex ${denso ? "w-[86px]" : "w-[104px]"} shrink-0 flex-col items-center gap-0.5 rounded-2xl border-2 bg-[#fffdf6] p-1.5 shadow-md transition-colors ${
+              className={`relative flex shrink-0 flex-col items-center gap-0.5 rounded-2xl border-2 bg-[#fffdf6] p-1.5 shadow-md transition-colors ${
+                vertical ? "w-full" : denso ? "w-[86px]" : "w-[104px]"
+              } ${
                 servible
                   ? "border-[#6d8f54] bg-[#f3f8ed] shadow-[0_0_0_3px_rgba(109,143,84,0.25)]"
                   : sirviendo
@@ -69,14 +82,22 @@ export function OrderQueue({
               }`}
             >
               {/* nombre del cliente */}
-              <span className="w-full truncate text-center text-[9px] font-bold uppercase tracking-wide text-cafe-sombra/60">
+              <span
+                className={`w-full truncate text-center font-bold uppercase tracking-wide text-cafe-sombra/60 ${
+                  vertical ? "text-[10px]" : "text-[9px]"
+                }`}
+              >
                 {p.cliente}
               </span>
 
               {/* el plato, protagonista */}
-              <DishSVG receta={p.receta} className={denso ? "h-10 w-full" : "h-14 w-full"} />
+              <DishSVG receta={p.receta} className={vertical ? "h-20 w-full" : denso ? "h-10 w-full" : "h-14 w-full"} />
 
-              <span className={`font-display font-extrabold leading-none text-[#6b4a2f] ${denso ? "text-[9px]" : "text-[10px]"}`}>
+              <span
+                className={`font-display font-extrabold leading-none text-[#6b4a2f] ${
+                  vertical ? "text-[13px]" : denso ? "text-[9px]" : "text-[10px]"
+                }`}
+              >
                 {receta.nombre}
               </span>
 
@@ -95,11 +116,11 @@ export function OrderQueue({
                         title={ESTACIONES[paso].nombre}
                         animate={tengo ? { scale: [1, 1.18, 1] } : { scale: 1 }}
                         transition={{ duration: 0.3 }}
-                        className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
-                          tengo ? "border-[#6d8f54] bg-[#dff0d0]" : "border-transparent bg-[#f7eedd] opacity-70"
-                        }`}
+                        className={`flex items-center justify-center rounded-md border transition-colors ${
+                          vertical ? "h-7 w-7" : "h-5 w-5"
+                        } ${tengo ? "border-[#6d8f54] bg-[#dff0d0]" : "border-transparent bg-[#f7eedd] opacity-70"}`}
                       >
-                        <IngGlyph id={paso} size={14} />
+                        <IngGlyph id={paso} size={vertical ? 19 : 14} />
                       </motion.span>
                     );
                   });
@@ -132,7 +153,11 @@ export function OrderQueue({
       </AnimatePresence>
 
       {pedidos.length === 0 && (
-        <div className="flex items-center justify-center rounded-2xl border-2 border-dashed border-[#e0cdab] px-6 py-3 text-xs font-bold text-cafe-sombra/45">
+        <div
+          className={`flex items-center justify-center rounded-2xl border-2 border-dashed border-[#e0cdab] text-center text-xs font-bold text-cafe-sombra/45 ${
+            vertical ? "h-full w-full p-4" : "px-6 py-3"
+          }`}
+        >
           Sin clientes… ¡aprovecha y adelanta trabajo!
         </div>
       )}

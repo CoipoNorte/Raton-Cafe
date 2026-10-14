@@ -4,12 +4,15 @@
  * cuando algo sale mal o el tiempo se agota.
  */
 
+import type { CSSProperties } from "react";
 import { motion } from "framer-motion";
 import type { HumorMascota } from "../game/types";
 
 export interface MascotProps {
   humor: HumorMascota;
   className?: string;
+  /** permite acotar el tamaño desde el layout (p. ej. maxHeight) */
+  style?: CSSProperties;
 }
 
 const PIEL = "#c9b8a5";
@@ -19,7 +22,7 @@ const TINTA = "#3a2c22";
 const SALVIA = "#a7b995";
 const CREMA = "#f6ead6";
 
-export function Mascot({ humor, className }: MascotProps) {
+export function Mascot({ humor, className, style }: MascotProps) {
   const feliz = humor === "feliz";
   const preocupado = humor === "preocupado";
 
@@ -27,6 +30,7 @@ export function Mascot({ humor, className }: MascotProps) {
     <motion.svg
       viewBox="0 0 220 232"
       className={className}
+      style={style}
       role="img"
       aria-label="Ratoncito barista"
       /* Celebración y preocupación se transmiten con el cuerpo entero */

@@ -5,7 +5,11 @@
  *  · El plato que estás montando (deducido automáticamente).
  *  · Huecos FANTASMA con el icono de lo que todavía falta.
  *  · Marcado en rojo lo que SOBRA (tócalo para quitarlo).
- * Cuando está completo, el plato se puede tocar o arrastrar al cliente.
+ *
+ * DISTRIBUCIÓN (tres zonas de ancho estable, legibles en cualquier móvil):
+ *   [ PLATO ]   [ · casillas centradas · ]   [ papelera ]
+ * La etiqueta de estado FLOTA sobre el borde superior, así nunca roba
+ * ancho a las casillas ni obliga a encoger los iconos.
  */
 
 import type { RefObject } from "react";
@@ -42,14 +46,20 @@ export function Tray({
   bandeja, analisis, onLimpiar, onQuitar, buscarPedidoEn, onServir, servible,
   sacudida, recibiendo = false, trayRef, denso = false,
 }: TrayProps) {
-  const casilla = denso ? "h-10 w-10" : "h-13 w-13";
-  const tamIcono = denso ? 23 : 30;
   const { receta, faltan, sobran, completa } = analisis;
   /* Igual que en la cocina: el plato se puede tocar O arrastrar, pero
      nunca ambas cosas en el mismo gesto (si no, se servía dos veces). */
   const gesto = useTapSinArrastre();
   /* huecos realmente vacíos (ni llenos ni fantasma) */
   const vacios = Math.max(0, MAX_BANDEJA - bandeja.length - faltan.length);
+
+  /* Medidas fluidas: las casillas crecen con la pantalla pero tienen
+     topes, así nunca se desbordan en un móvil estrecho. */
+  const casilla = denso
+    ? "h-[clamp(34px,10vw,44px)] w-[clamp(34px,10vw,44px)]"
+    : "h-[clamp(40px,11vw,56px)] w-[clamp(40px,11vw,56px)]";
+  const tamIcono = denso ? 22 : 30;
+  const plato = denso ? "h-[52px] w-[52px]" : "h-[clamp(60px,16vw,76px)] w-[clamp(60px,16vw,76px)]";
 
   /** Al soltar el plato: ¿cayó sobre algún cliente? */
   const soltarPlato = (info: PanInfo) => {
@@ -62,11 +72,13 @@ export function Tray({
       ref={trayRef as RefObject<HTMLElement> & ((el: HTMLElement | null) => void)}
       aria-label="Bandeja de preparación"
       animate={
-        sacudida > 0 ? { x: [0, -10, 10, -6, 6, 0] } : recibiendo ? { scale: 1.03 } : { scale: 1 }
+        sacudida > 0 ? { x: [0, -10, 10, -6, 6, 0] } : recibiendo ? { scale: 1.02 } : { scale: 1 }
       }
       key={sacudida}
       transition={{ duration: 0.4 }}
-      className={`flex items-center gap-2 rounded-2xl border-2 bg-[#fffdf6]/95 px-2.5 shadow-lg backdrop-blur-md transition-colors ${denso ? "py-1.5" : "py-2"} ${
+      className={`relative flex w-full shrink-0 items-center gap-2 rounded-2xl border-2 bg-[#fffdf6]/95 shadow-lg backdrop-blur-md transition-colors sm:gap-3 ${
+        denso ? "px-2 py-1.5" : "px-2.5 py-2.5"
+      } ${
         recibiendo
           ? "border-[#c98a4b] bg-[#fff6e6] shadow-[0_0_0_4px_rgba(201,138,75,0.25)]"
           : completa
@@ -74,8 +86,30 @@ export function Tray({
             : "border-[#e0cdab]"
       }`}
     >
-      {/* PLATO: tócalo o arrástralo al cliente cuando esté completo */}
-      <div className={`relative flex ${denso ? "h-12 w-12" : "h-16 w-16"} shrink-0 items-center justify-center rounded-xl bg-[#f7eedd]`}>
+      {/* ESTADO: flota sobre el borde superior, no consume ancho */}
+      <AnimatePresence>
+        {receta && (
+          <motion.span
+            key={`${receta}-${completa}-${sobran.length}`}
+            initial={{ opacity: 0, y: 6, scale: 0.85 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ type: "spring", stiffness: 450, damping: 24 }}
+            className={`absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-2.5 py-0.5 font-display text-[10px] font-extrabold text-white shadow-md ${
+              completa ? "bg-[#6d8f54]" : sobran.length > 0 ? "bg-[#d64541]" : "bg-[#c98a4b]"
+            }`}
+          >
+            {completa
+              ? `¡${RECETAS[receta].nombre} listo!`
+              : sobran.length > 0
+                ? "Quita lo marcado en rojo"
+                : `${RECETAS[receta].nombre}: falta ${faltan.length}`}
+          </motion.span>
+        )}
+      </AnimatePresence>
+
+      {/* ZONA 1 · PLATO: tócalo o arrástralo al cliente cuando esté completo */}
+      <div className={`relative flex ${plato} shrink-0 items-center justify-center rounded-xl bg-[#f7eedd]`}>
         <AnimatePresence mode="wait">
           {receta ? (
             <motion.div
@@ -97,7 +131,7 @@ export function Tray({
               animate={{ scale: 1, opacity: completa ? 1 : 0.45, rotate: 0 }}
               exit={{ scale: 0.6, opacity: 0 }}
               transition={{ type: "spring", stiffness: 400, damping: 18 }}
-              className={`h-full w-full touch-none ${completa ? "cursor-grab" : ""}`}
+              className={`h-full w-full touch-none ${completa ? "cursor-grab active:cursor-grabbing" : ""}`}
               aria-label={
                 completa
                   ? `${RECETAS[receta].nombre} listo: tócalo o arrástralo al cliente`
@@ -107,7 +141,10 @@ export function Tray({
               <DishSVG receta={receta} className="h-full w-full drop-shadow" />
             </motion.div>
           ) : (
-            <motion.span key="vacio" className="px-1 text-center text-[9px] font-bold leading-tight text-cafe-sombra/40">
+            <motion.span
+              key="vacio"
+              className="px-1 text-center text-[9px] font-bold leading-tight text-cafe-sombra/40"
+            >
               suelta aquí
             </motion.span>
           )}
@@ -121,8 +158,8 @@ export function Tray({
         )}
       </div>
 
-      {/* Casillas: lo que llevas · lo que falta (fantasma) · huecos */}
-      <div className="flex flex-1 flex-wrap items-center gap-1.5">
+      {/* ZONA 2 · CASILLAS: centradas y flexibles */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5">
         <AnimatePresence mode="popLayout">
           {bandeja.map((ing, i) => {
             const estorba = sobran.includes(i);
@@ -138,7 +175,7 @@ export function Tray({
                 transition={{ type: "spring", stiffness: 500, damping: 20 }}
                 title={`${ESTACIONES[ing].nombre}${estorba ? " (sobra: toca para quitar)" : ""}`}
                 aria-label={`${ESTACIONES[ing].nombre}${estorba ? ", sobra. " : ". "}Toca para quitar`}
-                className={`relative flex ${casilla} items-center justify-center rounded-xl border-2 shadow-sm ${
+                className={`relative flex ${casilla} shrink-0 items-center justify-center rounded-xl border-2 shadow-sm ${
                   estorba ? "border-[#d64541] bg-[#fdeceb]" : "border-[#9caf88] bg-white"
                 }`}
               >
@@ -167,7 +204,7 @@ export function Tray({
               transition={{ type: "spring", stiffness: 400, damping: 22 }}
               title={`Falta: ${ESTACIONES[ing].nombre}`}
               aria-label={`Falta ${ESTACIONES[ing].nombre}`}
-              className={`flex ${casilla} items-center justify-center rounded-xl border-2 border-dashed border-[#c98a4b] bg-[#fff6e6]`}
+              className={`flex ${casilla} shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-[#c98a4b] bg-[#fff6e6]`}
             >
               <motion.span
                 animate={{ opacity: [0.35, 0.85, 0.35] }}
@@ -183,39 +220,21 @@ export function Tray({
           <motion.span
             key={`hueco-${i}`}
             animate={recibiendo ? { borderColor: "#c98a4b", scale: 1.06 } : { borderColor: "#e4d4b8", scale: 1 }}
-            className={`${casilla} rounded-xl border-2 border-dashed`}
+            className={`${casilla} shrink-0 rounded-xl border-2 border-dashed`}
           />
         ))}
       </div>
 
-      {/* Nombre del plato / aviso + botón tirar */}
-      <div className="flex shrink-0 flex-col items-center gap-1">
-        {receta && (
-          <motion.span
-            key={`${receta}-${completa}`}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`whitespace-nowrap rounded-full px-2 py-0.5 font-display text-[10px] font-extrabold text-white ${
-              completa ? "bg-[#6d8f54]" : sobran.length > 0 ? "bg-[#d64541]" : "bg-[#c98a4b]"
-            }`}
-          >
-            {completa
-              ? `¡${RECETAS[receta].nombre}!`
-              : sobran.length > 0
-                ? "Quita lo rojo"
-                : `Falta ${faltan.length}`}
-          </motion.span>
-        )}
-        <motion.button
-          onClick={onLimpiar}
-          whileTap={{ scale: 0.85 }}
-          disabled={bandeja.length === 0}
-          aria-label="Tirar la bandeja"
-          className={`flex ${denso ? "h-8 w-8" : "h-9 w-9"} items-center justify-center rounded-full border border-[#ecdcbf] bg-white text-cafe-sombra shadow transition-opacity disabled:opacity-30`}
-        >
-          <Trash2 size={15} />
-        </motion.button>
-      </div>
+      {/* ZONA 3 · ACCIONES */}
+      <motion.button
+        onClick={onLimpiar}
+        whileTap={{ scale: 0.85 }}
+        disabled={bandeja.length === 0}
+        aria-label="Tirar la bandeja"
+        className={`flex ${denso ? "h-9 w-9" : "h-11 w-11"} shrink-0 items-center justify-center rounded-full border border-[#ecdcbf] bg-white text-cafe-sombra shadow transition-opacity disabled:opacity-30`}
+      >
+        <Trash2 size={denso ? 15 : 18} />
+      </motion.button>
     </motion.section>
   );
 }

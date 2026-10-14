@@ -391,6 +391,96 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
   const humorVisible: HumorMascota =
     humor !== "idle" ? humor : servible ? "feliz" : tiempoBajo ? "preocupado" : "idle";
 
+  /* ------------------------- Bloques de la mesa -------------------------
+     Se declaran una sola vez y se recolocan según el layout, así móvil y
+     escritorio comparten exactamente el mismo estado y comportamiento. */
+
+  const bloqueClientes = (vertical: boolean) => (
+    <OrderQueue
+      pedidos={pedidos}
+      ahora={ahora}
+      servibleId={servible?.id ?? null}
+      rechazadoId={rechazadoId}
+      onServir={servir}
+      registrarTarjeta={registrarTarjeta}
+      bandeja={bandeja}
+      sirviendo={recetaLista !== null}
+      vertical={vertical}
+      denso={denso}
+    />
+  );
+
+  const bloqueBandeja = (
+    <Tray
+      bandeja={bandeja}
+      analisis={analisis}
+      onLimpiar={limpiarBandeja}
+      onQuitar={quitarDeBandeja}
+      buscarPedidoEn={buscarPedidoEn}
+      onServir={servir}
+      servible={servible}
+      sacudida={sacudida}
+      recibiendo={arrastrandoIng}
+      trayRef={trayRef}
+      denso={denso}
+    />
+  );
+
+  const bloqueCocina = (
+    <StationGrid
+      estaciones={estaciones}
+      ahora={ahora}
+      onTocar={tocarEstacion}
+      necesarios={necesarios}
+      trayRef={trayRef}
+      onArrastrando={setArrastrandoIng}
+      denso={denso}
+      amplio={vp.amplio}
+    />
+  );
+
+  /** Mascota que llena el alto libre, con tope según el layout. */
+  const bloqueMascota = (topePx: number) =>
+    !vp.bajo && (
+      <div className="flex min-h-0 w-full flex-1 items-end justify-center">
+        <Mascot
+          humor={humorVisible}
+          className="h-full w-auto drop-shadow-[0_8px_16px_rgba(92,62,40,0.25)]"
+          /* min(): crece hasta el tope en pantallas grandes, pero jamás
+             desborda el hueco disponible en pantallas pequeñas. */
+          style={{ maxHeight: `min(${topePx}px, 100%)` }}
+        />
+      </div>
+    );
+
+  /** Textos flotantes de recompensa (se anclan a la zona central). */
+  const bloqueFlotantes = (
+    <div className="pointer-events-none absolute inset-x-0 -top-1 z-40 flex flex-col items-center">
+      <AnimatePresence>
+        {flotantes.map((f) => (
+          <motion.span
+            key={f.id}
+            initial={{ opacity: 0, y: 12, scale: 0.8 }}
+            animate={{ opacity: 1, y: -14, scale: 1.05 }}
+            exit={{ opacity: 0 }}
+            className={`font-display text-lg font-extrabold drop-shadow-[0_2px_6px_rgba(255,255,255,0.95)] ${
+              f.bueno ? "text-[#6d8f54]" : "text-[#c4473f]"
+            }`}
+          >
+            {f.texto}
+          </motion.span>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+
+  /** Rótulo de columna (solo escritorio). */
+  const rotulo = (texto: string) => (
+    <h2 className="shrink-0 px-1 pb-1 font-display text-[10px] font-extrabold uppercase tracking-[0.18em] text-cafe-sombra/45">
+      {texto}
+    </h2>
+  );
+
   return (
     <div className="relative flex h-dvh w-full touch-manipulation select-none flex-col overflow-hidden">
       <Fondo />
@@ -406,112 +496,87 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
         onAlternarPausa={alternarPausa}
       />
 
-      <div className={`relative z-10 mx-auto flex h-full w-full max-w-3xl flex-col gap-1.5 px-2 pb-2 ${denso ? "pt-7" : "pt-9"}`}>
-        {/* 1 · Clientes esperando */}
-        <div className="shrink-0 overflow-x-auto">
-          <OrderQueue
-            pedidos={pedidos}
-            ahora={ahora}
-            servibleId={servible?.id ?? null}
-            rechazadoId={rechazadoId}
-            onServir={servir}
-            registrarTarjeta={registrarTarjeta}
-            bandeja={bandeja}
-            sirviendo={recetaLista !== null}
-            denso={denso}
-          />
-        </div>
+      {vp.amplio ? (
+        /* ================= ESCRITORIO / TABLET: tres columnas =================
+           El orden sigue el flujo natural del trabajo y acorta los arrastres:
+              COCINA  →  BANDEJA  →  CLIENTES
+           Así se aprovecha todo el ancho en vez de dejar los lados vacíos. */
+        <div
+          className="relative z-10 mx-auto grid h-full w-full max-w-[1500px] gap-3 px-3 pb-3 pt-10"
+          style={{ gridTemplateColumns: "clamp(280px,27vw,400px) minmax(0,1fr) clamp(230px,22vw,320px)" }}
+        >
+          {/* Columna 1 · Cocina */}
+          <section className="flex min-h-0 flex-col" aria-label="Cocina">
+            {rotulo("Cocina")}
+            <div className="scroll-cafe min-h-0 flex-1 overflow-y-auto">{bloqueCocina}</div>
+          </section>
 
-        {/* 2 · Bandeja + mascota (zona central, con confetti) */}
-        <div className="relative flex min-h-0 flex-1 items-center justify-center gap-2">
-          <Mascot humor={humorVisible} className={`shrink-0 drop-shadow-lg ${denso ? "w-12" : "w-20"}`} />
-          <div className="min-w-0 flex-1">
-            <Tray
-              bandeja={bandeja}
-              analisis={analisis}
-              onLimpiar={limpiarBandeja}
-              onQuitar={quitarDeBandeja}
-              buscarPedidoEn={buscarPedidoEn}
-              onServir={servir}
-              servible={servible}
-              sacudida={sacudida}
-              recibiendo={arrastrandoIng}
-              trayRef={trayRef}
-              denso={denso}
-            />
+          {/* Columna 2 · Mascota + bandeja (protagonista) */}
+          <section className="relative flex min-h-0 flex-col items-center justify-end gap-2" aria-label="Zona de preparación">
+            {bloqueMascota(300)}
+            {bloqueBandeja}
+            {bloqueFlotantes}
+            <AnimatePresence>{confettiId > 0 && <Confetti key={confettiId} semilla={confettiId} />}</AnimatePresence>
+          </section>
+
+          {/* Columna 3 · Clientes en cola */}
+          <section className="flex min-h-0 flex-col" aria-label="Clientes">
+            {rotulo(`Clientes (${pedidos.length})`)}
+            <div className="min-h-0 flex-1">{bloqueClientes(true)}</div>
+          </section>
+        </div>
+      ) : (
+        /* ===================== MÓVIL / TABLET VERTICAL =====================
+           Apilado: clientes arriba, bandeja al centro, cocina abajo. */
+        <div className={`relative z-10 mx-auto flex h-full w-full max-w-3xl flex-col gap-1.5 px-2 pb-2 ${denso ? "pt-7" : "pt-9"}`}>
+          <div className="shrink-0 overflow-x-auto">{bloqueClientes(false)}</div>
+
+          <div className="relative flex min-h-0 flex-1 flex-col items-center justify-end gap-1.5">
+            {bloqueMascota(190)}
+            {bloqueBandeja}
+            {bloqueFlotantes}
+            <AnimatePresence>{confettiId > 0 && <Confetti key={confettiId} semilla={confettiId} />}</AnimatePresence>
           </div>
 
-          <AnimatePresence>{confettiId > 0 && <Confetti key={confettiId} semilla={confettiId} />}</AnimatePresence>
-          <AnimatePresence>{coach && <Coach onCerrar={empezarTurno} />}</AnimatePresence>
-
-          {/* Velo de pausa manual */}
-          <AnimatePresence>
-            {pausaManual && !coach && (
-              <motion.button
-                onClick={alternarPausa}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-[#f4e4cc]/80 backdrop-blur-sm"
-              >
-                <span className="font-display text-3xl font-extrabold text-[#6b4a2f]">Turno en pausa</span>
-                <span className="rounded-full bg-[#c96f4a] px-5 py-2 font-display text-sm font-extrabold text-white shadow-lg">
-                  Toca para continuar
-                </span>
-              </motion.button>
-            )}
-          </AnimatePresence>
-
-          {/* textos flotantes de recompensa */}
-          <div className="pointer-events-none absolute inset-x-0 -top-1 z-40 flex flex-col items-center">
-            <AnimatePresence>
-              {flotantes.map((f) => (
-                <motion.span
-                  key={f.id}
-                  initial={{ opacity: 0, y: 12, scale: 0.8 }}
-                  animate={{ opacity: 1, y: -14, scale: 1.05 }}
-                  exit={{ opacity: 0 }}
-                  className={`font-display text-base font-extrabold drop-shadow-[0_2px_6px_rgba(255,255,255,0.95)] ${
-                    f.bueno ? "text-[#6d8f54]" : "text-[#c4473f]"
-                  }`}
-                >
-                  {f.texto}
-                </motion.span>
-              ))}
-            </AnimatePresence>
-          </div>
+          <div className="shrink-0">{bloqueCocina}</div>
         </div>
+      )}
 
-        {/* Capa de ingredientes VOLANDO de la estación a la bandeja */}
-        <div className="pointer-events-none fixed inset-0 z-[60]">
-          <AnimatePresence>
-            {vuelos.map((v) => (
-              <motion.div
-                key={v.id}
-                className="absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#ecdcbf] bg-white shadow-lg"
-                initial={{ x: v.x0, y: v.y0, scale: 1.15, opacity: 1, rotate: -10 }}
-                animate={{ x: v.x1, y: v.y1, scale: 0.55, opacity: 0.9, rotate: 12 }}
-                exit={{ opacity: 0, scale: 0.3 }}
-                transition={{ duration: 0.42, ease: [0.3, 0.8, 0.4, 1] }}
-              >
-                <IngGlyph id={v.ing} size={24} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
+      {/* Guía inicial y velo de pausa: fijos, comunes a ambos layouts */}
+      <AnimatePresence>{coach && <Coach onCerrar={empezarTurno} />}</AnimatePresence>
+      <AnimatePresence>
+        {pausaManual && !coach && (
+          <motion.button
+            onClick={alternarPausa}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-[#f4e4cc]/80 backdrop-blur-sm"
+          >
+            <span className="font-display text-3xl font-extrabold text-[#6b4a2f]">Turno en pausa</span>
+            <span className="rounded-full bg-[#c96f4a] px-5 py-2 font-display text-sm font-extrabold text-white shadow-lg">
+              Toca para continuar
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
 
-        {/* 3 · La cocina */}
-        <div className="shrink-0">
-          <StationGrid
-            estaciones={estaciones}
-            ahora={ahora}
-            onTocar={tocarEstacion}
-            necesarios={necesarios}
-            trayRef={trayRef}
-            onArrastrando={setArrastrandoIng}
-            denso={denso}
-          />
-        </div>
+      {/* Capa de ingredientes VOLANDO de la estación a la bandeja */}
+      <div className="pointer-events-none fixed inset-0 z-[60]">
+        <AnimatePresence>
+          {vuelos.map((v) => (
+            <motion.div
+              key={v.id}
+              className="absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#ecdcbf] bg-white shadow-lg"
+              initial={{ x: v.x0, y: v.y0, scale: 1.15, opacity: 1, rotate: -10 }}
+              animate={{ x: v.x1, y: v.y1, scale: 0.55, opacity: 0.9, rotate: 12 }}
+              exit={{ opacity: 0, scale: 0.3 }}
+              transition={{ duration: 0.42, ease: [0.3, 0.8, 0.4, 1] }}
+            >
+              <IngGlyph id={v.ing} size={24} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

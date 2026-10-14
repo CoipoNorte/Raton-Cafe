@@ -29,6 +29,8 @@ export interface StationGridProps {
   trayRef: RefObject<HTMLElement | null>;
   onArrastrando?: (activo: boolean) => void;
   denso?: boolean;
+  /** escritorio: fichas más grandes, hay sitio de sobra en la columna */
+  amplio?: boolean;
 }
 
 /** Anillo de progreso circular (0..1). */
@@ -47,7 +49,7 @@ function Anillo({ progreso, color, tam }: { progreso: number; color: string; tam
 }
 
 export function StationGrid({
-  estaciones, ahora, onTocar, necesarios, trayRef, onArrastrando, denso = false,
+  estaciones, ahora, onTocar, necesarios, trayRef, onArrastrando, denso = false, amplio = false,
 }: StationGridProps) {
   const zonas: Zona[] = ["cafe", "cocina", "vitrina"];
   /* Distingue "toque" de "arrastre": sin esto la acción se duplicaba. */
@@ -76,7 +78,10 @@ export function StationGrid({
             <h3 className="mb-1 px-1 text-[9px] font-extrabold uppercase tracking-widest" style={{ color: z.texto }}>
               {z.nombre}
             </h3>
-            <div className="grid grid-cols-4 gap-1.5 min-[380px]:gap-2">
+            {/* Reparto flexible (no una rejilla fija de 4): las zonas con
+                2 o 3 estaciones llenan el ancho en vez de dejar huecos, y
+                si la columna es estrecha (escritorio) las fichas envuelven. */}
+            <div className="flex flex-wrap gap-1.5 min-[380px]:gap-2">
               {ids.map((id) => {
                 const def = ESTACIONES[id];
                 const st = estaciones[id];
@@ -87,7 +92,7 @@ export function StationGrid({
                     ? Math.min(1, (transcurrido - def.tiempo) / def.margen)
                     : 0;
                 const porQuemarse = st.estado === "listo" && margenUsado > 0.6;
-                const tam = denso ? 50 : 60;
+                const tam = denso ? 50 : amplio ? 72 : 60;
                 const pedidoPor = necesarios[id] ?? 0;
                 /* Se puede arrastrar lo que ya es un ingrediente tangible */
                 const arrastrable = def.tiempo === 0 || st.estado === "listo";
@@ -149,7 +154,11 @@ export function StationGrid({
                               ? "border-[#d9b38a]"
                               : "border-transparent"
                     } ${arrastrable ? "cursor-grab active:cursor-grabbing" : ""}`}
-                    style={{ height: tam + 22 }}
+                    /* minHeight (no height fija): si un nombre ocupa dos
+                       líneas, la ficha crece en vez de recortar el texto.
+                       flex con base = tam: llena el ancho cuando sobra sitio
+                       y envuelve a la fila siguiente cuando falta. */
+                    style={{ minHeight: tam + 22, flex: `1 1 ${tam}px` }}
                   >
                     {/* badge táctico: cuántos piden los clientes de la barra */}
                     {pedidoPor > 0 && st.estado === "libre" && (
@@ -178,7 +187,7 @@ export function StationGrid({
                           animate={st.estado === "trabajando" ? { opacity: [1, 0.45, 1] } : { opacity: 1 }}
                           transition={st.estado === "trabajando" ? { duration: 0.9, repeat: Infinity } : undefined}
                         >
-                          <IngGlyph id={id} size={denso ? 25 : 31} />
+                          <IngGlyph id={id} size={denso ? 25 : amplio ? 38 : 31} />
                         </motion.span>
                       )}
 

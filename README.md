@@ -144,14 +144,26 @@ npm run preview# vista previa local de la build
 
 ### Opción A — automática (Windows): `deploy.bat`
 
-Doble clic en **`deploy.bat`** y listo. Pasos numerados con mensajes claros y manejo de errores:
+Doble clic en **`deploy.bat`** y listo. Ahora guarda el código fuente en GitHub y publica el juego en una sola operación:
 
 1. Comprueba que `npm` existe (si no, avisa y sale).
-2. Añade los scripts `predeploy`/`deploy` a `package.json` **editándolo con `node -e`** (no rompe el JSON).
-3. Verifica e inserta `base: '/Raton-Cafe/'` en `vite.config.ts` si faltara.
-4. Ejecuta `npm i`.
-5. Ejecuta `npm run build`.
-6. Publica `dist/` con `npx gh-pages -d dist`.
+2. Comprueba Git, el repositorio, el remoto `origin` y detecta la rama actual.
+3. Añade los scripts `predeploy`/`deploy` a `package.json` **editándolo con `node -e`** (no rompe el JSON).
+4. Verifica e inserta `base: '/Raton-Cafe/'` en `vite.config.ts` si faltara.
+5. Ejecuta `npm i`.
+6. Ejecuta `npm run build`; si la compilación falla, no sube ni publica nada.
+7. Ejecuta `git add -A` y crea un commit automático **solo si hay cambios**.
+8. Hace `git push` de la rama actual a `origin` (normalmente `main`).
+9. Publica `dist/` con `npx gh-pages -d dist`.
+
+El mensaje usado para cada commit automático es `Actualizacion automatica de Raton Cafe`. Si no hay cambios pendientes, el paso de commit se omite sin producir un error, pero el script verifica igualmente el `push` y despliega la versión compilada.
+
+La primera vez, Git puede pedir tu identidad. Configúrala una sola vez:
+
+```bash
+git config --global user.name "Tu Nombre"
+git config --global user.email "tu-correo@ejemplo.com"
+```
 
 Al terminar, **la primera vez**, activa Pages:
 
