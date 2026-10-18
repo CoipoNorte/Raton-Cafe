@@ -28,13 +28,16 @@ import {
   BONUS_SEGUNDOS, MAX_BANDEJA, SEGUNDOS_PARTIDA, UMBRAL_TIEMPO_BAJO, dificultadPara,
 } from "../game/balance";
 import { ESTACIONES, ORDEN_ESTACIONES, RECETAS } from "../game/recipes";
+import { FRANJAS, estrellasDe, siguienteTurno, turnoDe, type FranjaId } from "../game/campaign";
 import { analizarBandeja, bandejaCoincide, generarPedido, pedidoQueCoincide, puntosPorServir } from "../game/logic";
 import { sonido } from "../game/sound";
-import { guardarRecord } from "../game/storage";
+import { guardarEstrellas, guardarRecord } from "../game/storage";
 import { IngGlyph } from "../components/Art";
-import type { Estacion, HumorMascota, IngredienteId, Pedido, RecetaId, ResultadoPartida } from "../game/types";
+import type { Estacion, HumorMascota, IngredienteId, Mision, Pedido, RecetaId, ResultadoPartida } from "../game/types";
 
 export interface GameScreenProps {
+  /** qué se juega: turno libre (arcade) o un turno de la carrera */
+  mision: Mision;
   onFin: (resultado: ResultadoPartida) => void;
   silenciado: boolean;
   onAlternarSilencio: () => void;
@@ -64,9 +67,22 @@ function estacionesIniciales(): Record<IngredienteId, Estacion> {
   return base;
 }
 
-export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreenProps) {
+export function GameScreen({ mision, onFin, silenciado, onAlternarSilencio }: GameScreenProps) {
   const vp = useViewport();
   const denso = vp.bajo || vp.compacto;
+
+  /* --------------------------- La misión ---------------------------
+     En CARRERA el turno se define en campaign.ts (clientes a servir,
+     paciencia, vidas y carta). En LIBRE se mantiene el arcade de 100 s
+     con dificultad creciente. */
+  const carrera = mision.modo === "carrera";
+  const def = useMemo(
+    () => (mision.modo === "carrera" ? turnoDe(mision.dia, mision.turnoIdx) : null),
+    [mision],
+  );
+  const objetivo = def?.clientes ?? 0;
+  const vidas = def?.vidas ?? 0;
+  const franja: FranjaId = def?.franja ?? "manana";
 
   /* ----------------------------- Estado ----------------------------- */
   const [ahora, setAhora] = useState(() => Date.now());
@@ -87,8 +103,12 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
   const [flotantes, setFlotantes] = useState<Flotante[]>([]);
   const [vuelos, setVuelos] = useState<Vuelo[]>([]);
   const [arrastrandoIng, setArrastrandoIng] = useState(false);
-  /* Guía inicial: el turno NO empieza hasta que la cierras */
-  const [coach, setCoach] = useState(true);
+  /* Guía inicial: el turno NO empieza hasta que la cierras.
+     En carrera solo aparece en el primer turno del día 1: después ya
+     sabes jugar y cortaría el ritmo entre turno y turno. */
+  const [coach, setCoach] = useState(
+    () => mision.modo === "libre" || (mision.dia === 1 && mision.turnoIdx === 0),
+  );
   /* Pausa manual (botón del HUD) */
   const [pausaManual, setPausaManual] = useState(false);
 
@@ -109,7 +129,12 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
   servidosRef.current = servidos;
 
   const siguienteIdRef = useRef(1);
-  const proximoSpawnRef = useRef(0);
+  /* Respiro inicial: aunque no haya guía (turnos 2+ de la carrera), da
+     un segundo y medio para situarse antes del primer cliente. */
+  const proximoSpawnRef = useRef(Date.now() + 1500);
+  /* Espejo de la definición del turno, para leerla dentro del bucle */
+  const defRef = useRef(def);
+  defRef.current = def;
   /* Espejo de la pausa para leerlo dentro del intervalo sin recrearlo */
   const pausadoRef = useRef(true);
   const finalizadoRef = useRef(false);
@@ -209,32 +234,87 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
         despues(1500, () => setHumor("idle"));
       }
 
-      /* --- 3. Llegada de clientes nuevos --- */
+      /* --- 3. Llegada de clientes nuevos ---
+         En carrera no se invita a más gente de la que falta por servir:
+         así el turno termina limpio, sin clientes "de más" en la barra. */
       const dif = dificultadPara(servidosRef.current);
-      if (vivos.length < dif.maxPedidos && t >= proximoSpawnRef.current) {
-        const nuevo = generarPedido(siguienteIdRef.current++, servidosRef.current, dif.paciencia, t);
+      const maxEnBarra = defRef.current?.maxSimultaneos ?? dif.maxPedidos;
+      const pacienciaCliente = defRef.current?.paciencia ?? dif.paciencia;
+      const intervaloCliente = defRef.current?.intervalo ?? dif.intervalo;
+      const porLlegar = defRef.current
+        ? defRef.current.clientes - servidosRef.current - vivos.length
+        : Infinity;
+
+      if (vivos.length < maxEnBarra && porLlegar > 0 && t >= proximoSpawnRef.current) {
+        const nuevo = generarPedido(
+          siguienteIdRef.current++,
+          servidosRef.current,
+          pacienciaCliente,
+          t,
+          defRef.current?.recetas,
+        );
         setPedidos((prev) => [...prev, nuevo]);
-        proximoSpawnRef.current = t + dif.intervalo;
+        proximoSpawnRef.current = t + intervaloCliente;
         sonido.campanilla();
       }
     }, 100);
     return () => window.clearInterval(intervalo);
   }, [despues, flotar]);
 
-  /* Tic-tac final y cierre del turno */
+  /* --------------------- Cierre del turno ---------------------------
+     LIBRE: termina cuando se agota el cronómetro.
+     CARRERA: termina al servir el objetivo (victoria) o al perder más
+     clientes de los permitidos (derrota). Sin cronómetro global. */
   useEffect(() => {
+    if (finalizadoRef.current) return;
+
+    /** Cierra la partida una sola vez, con un pequeño respiro visual. */
+    const cerrar = (extra: Partial<ResultadoPartida>, celebrar: boolean) => {
+      finalizadoRef.current = true;
+      const esRecord = guardarRecord(servidos, puntos);
+      if (celebrar) sonido.fanfarria();
+      despues(celebrar ? 900 : 700, () =>
+        onFin({
+          modo: carrera ? "carrera" : "libre",
+          pedidos: servidos,
+          propinas: puntos,
+          mejorCombo: mejorRacha,
+          esRecord,
+          perdidos,
+          ...extra,
+        }),
+      );
+    };
+
+    if (carrera && mision.modo === "carrera") {
+      const base = { dia: mision.dia, turnoIdx: mision.turnoIdx, objetivo };
+      if (servidos >= objetivo) {
+        const estrellas = estrellasDe(perdidos);
+        guardarEstrellas(mision.dia, mision.turnoIdx, estrellas);
+        cerrar(
+          {
+            ...base,
+            completado: true,
+            estrellas,
+            finDeCarrera: siguienteTurno(mision.dia, mision.turnoIdx) === null,
+          },
+          true,
+        );
+      } else if (perdidos > vidas) {
+        sonido.clienteSeVa();
+        cerrar({ ...base, completado: false, estrellas: 0 }, false);
+      }
+      return;
+    }
+
+    /* Turno libre: tic-tac de los últimos segundos y fin por tiempo */
     const seg = Math.ceil(tiempoMs / 1000);
     if (seg !== ultimoSegundoRef.current) {
       ultimoSegundoRef.current = seg;
       if (seg > 0 && seg <= UMBRAL_TIEMPO_BAJO) sonido.tic();
     }
-    if (tiempoMs <= 0 && !finalizadoRef.current) {
-      finalizadoRef.current = true;
-      const esRecord = guardarRecord(servidos, puntos);
-      if (esRecord) sonido.fanfarria();
-      onFin({ pedidos: servidos, propinas: puntos, mejorCombo: mejorRacha, esRecord, perdidos });
-    }
-  }, [tiempoMs, servidos, puntos, mejorRacha, perdidos, onFin]);
+    if (tiempoMs <= 0) cerrar({}, false);
+  }, [tiempoMs, servidos, puntos, mejorRacha, perdidos, onFin, carrera, mision, objetivo, vidas, despues]);
 
   /* --------------------------- Interacción --------------------------- */
 
@@ -356,7 +436,8 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
   };
 
   /* --------------------------- Derivados ----------------------------- */
-  const tiempoBajo = tiempoMs <= UMBRAL_TIEMPO_BAJO * 1000;
+  /* En carrera no hay cronómetro: el apremio lo marca la paciencia. */
+  const tiempoBajo = !carrera && tiempoMs <= UMBRAL_TIEMPO_BAJO * 1000;
   /**
    * Análisis en vivo de la bandeja: qué plato estás montando, qué falta
    * y qué sobra. Prioriza las recetas que los clientes piden ahora mismo;
@@ -483,7 +564,7 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
 
   return (
     <div className="relative flex h-dvh w-full touch-manipulation select-none flex-col overflow-hidden">
-      <Fondo />
+      <Fondo franja={carrera ? franja : undefined} />
       <HUD
         fraccionTiempo={tiempoMs / (SEGUNDOS_PARTIDA * 1000)}
         tiempoBajo={tiempoBajo}
@@ -494,9 +575,18 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
         onAlternarSilencio={onAlternarSilencio}
         pausado={pausado}
         onAlternarPausa={alternarPausa}
+        carrera={carrera}
+        objetivo={objetivo}
+        vidas={vidas}
+        perdidos={perdidos}
+        etiquetaTurno={
+          carrera && mision.modo === "carrera"
+            ? `Día ${mision.dia} · ${FRANJAS[franja].emoji} ${FRANJAS[franja].nombre}`
+            : undefined
+        }
       />
 
-      {vp.amplio ? (
+      {vp.layout === "columnas" ? (
         /* ================= ESCRITORIO / TABLET: tres columnas =================
            El orden sigue el flujo natural del trabajo y acorta los arrastres:
               COCINA  →  BANDEJA  →  CLIENTES
@@ -526,13 +616,20 @@ export function GameScreen({ onFin, silenciado, onAlternarSilencio }: GameScreen
           </section>
         </div>
       ) : (
-        /* ===================== MÓVIL / TABLET VERTICAL =====================
-           Apilado: clientes arriba, bandeja al centro, cocina abajo. */
-        <div className={`relative z-10 mx-auto flex h-full w-full max-w-3xl flex-col gap-1.5 px-2 pb-2 ${denso ? "pt-7" : "pt-9"}`}>
+        /* ============== CUADRADO · MÓVIL · TABLET VERTICAL ==============
+           Apilado: clientes arriba, bandeja al centro, cocina abajo.
+           En pantallas cuadradas (relación ~1:1) se ensancha el contenedor
+           y crece la mascota: así se aprovecha el alto, que es el fuerte
+           de ese formato, en vez de estrangular tres columnas. */
+        <div
+          className={`relative z-10 mx-auto flex h-full w-full flex-col gap-1.5 px-2 pb-2 ${
+            vp.layout === "cuadrado" ? "max-w-5xl gap-2 px-4 pt-10" : denso ? "max-w-3xl pt-7" : "max-w-3xl pt-9"
+          }`}
+        >
           <div className="shrink-0 overflow-x-auto">{bloqueClientes(false)}</div>
 
           <div className="relative flex min-h-0 flex-1 flex-col items-center justify-end gap-1.5">
-            {bloqueMascota(190)}
+            {bloqueMascota(vp.layout === "cuadrado" ? 260 : 190)}
             {bloqueBandeja}
             {bloqueFlotantes}
             <AnimatePresence>{confettiId > 0 && <Confetti key={confettiId} semilla={confettiId} />}</AnimatePresence>

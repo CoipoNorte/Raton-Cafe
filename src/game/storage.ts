@@ -18,6 +18,8 @@ export interface EstadoGuardado {
   recordPedidos: number; // récord histórico de pedidos perfectos
   recordPropinas: number; // récord histórico de propinas (puntos)
   silenciado: boolean; // preferencia de sonido
+  /** estrellas por turno de la carrera, clave "dia-turno" → 1..3 */
+  estrellas: Record<string, number>;
 }
 
 const ESTADO_INICIAL: EstadoGuardado = {
@@ -25,7 +27,11 @@ const ESTADO_INICIAL: EstadoGuardado = {
   recordPedidos: 0,
   recordPropinas: 0,
   silenciado: false,
+  estrellas: {},
 };
+
+/** Clave estable de un turno de la carrera. */
+export const claveTurno = (dia: number, turnoIdx: number) => `${dia}-${turnoIdx}`;
 
 /* ------------------------------------------------------------------ */
 /* Acceso seguro a localStorage                                        */
@@ -54,9 +60,11 @@ function leerDisco(): EstadoGuardado {
       if (!crudo) return { ...ESTADO_INICIAL };
       const parseado = JSON.parse(crudo) as Partial<EstadoGuardado>;
       // Migración perezosa: si la versión es distinta, conservamos lo válido.
+      // `estrellas` se normaliza por si viene de un guardado antiguo.
       return {
         ...ESTADO_INICIAL,
         ...parseado,
+        estrellas: { ...(parseado.estrellas ?? {}) },
         version: VERSION,
       };
     }
@@ -104,4 +112,27 @@ export function guardarSilencio(silenciado: boolean): void {
   if (estado.silenciado !== silenciado) {
     escribirDisco({ ...estado, silenciado });
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Progreso del modo carrera                                           */
+/* ------------------------------------------------------------------ */
+
+/** Mapa de estrellas de todos los turnos superados. */
+export function cargarEstrellas(): Record<string, number> {
+  return leerDisco().estrellas;
+}
+
+/**
+ * Guarda las estrellas de un turno superado (solo si mejora la marca).
+ * Devuelve el mapa actualizado para refrescar la interfaz sin releer.
+ */
+export function guardarEstrellas(dia: number, turnoIdx: number, estrellas: number): Record<string, number> {
+  const estado = leerDisco();
+  const clave = claveTurno(dia, turnoIdx);
+  const previas = estado.estrellas[clave] ?? 0;
+  if (estrellas <= previas) return estado.estrellas;
+  const estrellasNuevas = { ...estado.estrellas, [clave]: estrellas };
+  escribirDisco({ ...estado, estrellas: estrellasNuevas });
+  return estrellasNuevas;
 }

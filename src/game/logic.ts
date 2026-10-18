@@ -85,13 +85,25 @@ export function analizarBandeja(bandeja: IngredienteId[], candidatas: RecetaId[]
   return mejor ?? { receta: null, faltan: [], sobran: [], completa: false };
 }
 
-/** Genera un cliente nuevo con una receta de la carta disponible. */
-export function generarPedido(id: number, servidos: number, paciencia: number, ahora: number): Pedido {
-  const carta = cartaDisponible(servidos);
+/**
+ * Genera un cliente nuevo.
+ * En turno libre la carta se amplía según los pedidos servidos; en el modo
+ * carrera se pasa la carta fija de ese turno con `recetasPermitidas`.
+ */
+export function generarPedido(
+  id: number,
+  servidos: number,
+  paciencia: number,
+  ahora: number,
+  recetasPermitidas?: RecetaId[],
+): Pedido {
+  const carta = recetasPermitidas?.length
+    ? recetasPermitidas
+    : cartaDisponible(servidos).map((r) => r.id);
   const receta = carta[Math.floor(Math.random() * carta.length)];
   return {
     id,
-    receta: receta.id,
+    receta,
     cliente: CLIENTES[Math.floor(Math.random() * CLIENTES.length)],
     nacido: ahora,
     paciencia,

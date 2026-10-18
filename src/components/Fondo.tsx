@@ -7,8 +7,14 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { prng } from "../game/data";
+import { FRANJAS, type FranjaId } from "../game/campaign";
 
-export function Fondo() {
+/**
+ * El cielo cambia con la franja horaria del turno (mañana, tarde, noche).
+ * Sin franja (turno libre / menús) usa la paleta cálida de siempre.
+ */
+export function Fondo({ franja }: { franja?: FranjaId }) {
+  const cielo = franja ? FRANJAS[franja].cielo : (["#f9f1e4", "#f4e4cc", "#ecd8ba"] as const);
   const motas = useMemo(() => {
     const azar = prng(20240601);
     return Array.from({ length: 16 }, (_, i) => ({
@@ -24,7 +30,12 @@ export function Fondo() {
   }, []);
 
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden bg-gradient-to-b from-[#f9f1e4] via-[#f4e4cc] to-[#ecd8ba]">
+    <motion.div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      animate={{ background: `linear-gradient(to bottom, ${cielo[0]}, ${cielo[1]}, ${cielo[2]})` }}
+      transition={{ duration: 0.8 }}
+    >
       {/* halo cálido superior */}
       <div className="absolute -top-24 left-1/2 h-72 w-[130%] -translate-x-1/2 rounded-[100%] bg-[#fff8ea]/70 blur-2xl" />
       {motas.map((m) => (
@@ -49,6 +60,6 @@ export function Fondo() {
           )}
         </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }

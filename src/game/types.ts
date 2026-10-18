@@ -43,11 +43,24 @@ export interface Pedido {
 /** Estado de ánimo de la mascota. */
 export type HumorMascota = "idle" | "feliz" | "preocupado";
 
+/** Qué se está jugando: turno libre (arcade) o un turno de la carrera. */
+export type Mision =
+  | { modo: "libre" }
+  | { modo: "carrera"; dia: number; turnoIdx: number };
+
 /** Estadísticas finales de una partida. */
 export interface ResultadoPartida {
+  modo: "libre" | "carrera";
   pedidos: number; // pedidos servidos correctamente
   propinas: number; // puntuación total
   mejorCombo: number; // racha máxima
   esRecord: boolean;
   perdidos: number; // clientes que se fueron sin su pedido
+  /* --- solo en modo carrera --- */
+  dia?: number;
+  turnoIdx?: number;
+  objetivo?: number; // clientes que había que servir
+  completado?: boolean; // ¿se superó el turno?
+  estrellas?: number; // 0 si se falló, 1-3 si se superó
+  finDeCarrera?: boolean; // era el último turno del día 7
 }

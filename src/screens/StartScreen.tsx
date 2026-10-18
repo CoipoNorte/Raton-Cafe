@@ -4,7 +4,7 @@
  */
 
 import { motion } from "framer-motion";
-import { Play, Trophy, Volume2, VolumeX } from "lucide-react";
+import { CalendarDays, Play, Star, Trophy, Volume2, VolumeX } from "lucide-react";
 import { DishSVG } from "../components/Art";
 import { Fondo } from "../components/Fondo";
 import { Mascot } from "../components/Mascot";
@@ -15,7 +15,12 @@ import { useViewport } from "../hooks/useViewport";
 export interface StartScreenProps {
   recordPedidos: number;
   recordPropinas: number;
+  /** turno libre (arcade de 100 s) */
   onJugar: () => void;
+  /** modo carrera: 7 días × 3 turnos */
+  onCarrera: () => void;
+  /** estrellas conseguidas en la carrera */
+  estrellasTotales: number;
   silenciado: boolean;
   onAlternarSilencio: () => void;
 }
@@ -23,7 +28,9 @@ export interface StartScreenProps {
 /** La carta que verá el jugador en el menú principal. */
 const CARTA: RecetaId[] = ["capuchino", "mokachino", "sandwich", "pastel", "pieLimon"];
 
-export function StartScreen({ recordPedidos, recordPropinas, onJugar, silenciado, onAlternarSilencio }: StartScreenProps) {
+export function StartScreen({
+  recordPedidos, recordPropinas, onJugar, onCarrera, estrellasTotales, silenciado, onAlternarSilencio,
+}: StartScreenProps) {
   /* En móvil horizontal (poca altura) encogemos todo para que el botón
      "Abrir la cafetería" siempre quede visible sin hacer scroll. */
   const { bajo } = useViewport();
@@ -73,17 +80,38 @@ export function StartScreen({ recordPedidos, recordPropinas, onJugar, silenciado
           </motion.div>
         )}
 
-        <motion.button
-          onClick={onJugar}
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.94 }}
-          className={`mt-1 flex items-center gap-3 rounded-full bg-gradient-to-b from-[#d98a52] to-[#c96f4a] font-display font-extrabold tracking-wide text-white shadow-[0_10px_26px_rgba(201,111,74,0.45)] ${
-            bajo ? "px-8 py-2.5 text-lg" : "px-12 py-4 text-2xl"
-          }`}
-        >
-          <Play size={bajo ? 19 : 24} fill="currentColor" />
-          Abrir la cafetería
-        </motion.button>
+        {/* Dos modos: la carrera es la vía principal, el turno libre el arcade */}
+        <div className={`flex w-full flex-col items-center gap-2 ${bajo ? "mt-0" : "mt-1"}`}>
+          <motion.button
+            onClick={onCarrera}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.94 }}
+            className={`flex items-center gap-3 rounded-full bg-gradient-to-b from-[#d98a52] to-[#c96f4a] font-display font-extrabold tracking-wide text-white shadow-[0_10px_26px_rgba(201,111,74,0.45)] ${
+              bajo ? "px-7 py-2.5 text-lg" : "px-11 py-4 text-2xl"
+            }`}
+          >
+            <CalendarDays size={bajo ? 19 : 24} />
+            Modo carrera
+            {estrellasTotales > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-white/25 px-2 py-0.5 text-sm">
+                <Star size={13} className="fill-white text-white" />
+                {estrellasTotales}
+              </span>
+            )}
+          </motion.button>
+
+          <motion.button
+            onClick={onJugar}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.94 }}
+            className={`flex items-center gap-2 rounded-full border-2 border-[#d9b38a] bg-white/80 font-display font-bold text-[#8a5a33] shadow ${
+              bajo ? "px-5 py-1.5 text-sm" : "px-7 py-2.5 text-base"
+            }`}
+          >
+            <Play size={bajo ? 15 : 18} fill="currentColor" />
+            Turno libre · 100 s
+          </motion.button>
+        </div>
 
         {/* La carta: lo que vas a aprender a preparar */}
         <div className={`w-full ${bajo ? "hidden" : "mt-1"}`}>
